@@ -1,0 +1,387 @@
+import React, { useState, useEffect } from 'react';
+import { useTheme } from '../ThemeContext';
+import { analyzeEmail, getAnalysisHistory, clearAnalysisHistory } from '../api/api';
+import ConfirmDialog from './ConfirmDialog';
+
+function EmailAnalyzer() {
+  const { isDark } = useTheme();
+  const [formData, setFormData] = useState({
+    email_from: '',
+    email_subject: '',
+    email_body: '',
+    headers: ''
+  });
+  const [result, setResult] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [showClearDialog, setShowClearDialog] = useState(false);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [showErrorDialog, setShowErrorDialog] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    loadHistory();
+  }, []);
+
+  const loadHistory = async () => {
+    try {
+      const response = await getAnalysisHistory(10);
+      setHistory(response.data);
+    } catch (error) {
+      console.error('Error loading history:', error);
+    }
+  };
+
+  const handleClearHistory = async () => {
+    try {
+      await clearAnalysisHistory();
+      setHistory([]);
+      setResult(null);
+      setShowClearDialog(false);
+      setShowSuccessDialog(true);
+    } catch (error) {
+      console.error('Error clearing history:', error);
+      setShowClearDialog(false);
+      setErrorMessage('Failed to clear history. Please try again.');
+      setShowErrorDialog(true);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setAnalyzing(true);
+      const response = await analyzeEmail(formData);
+      setResult(response.data);
+      loadHistory();
+    } catch (error) {
+      console.error('Error analyzing email:', error);
+      setErrorMessage('Error analyzing email. Please try again.');
+      setShowErrorDialog(true);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const getRiskColor = (classification) => {
+    const colors = {
+      safe: 'bg-green-500',
+      suspicious: 'bg-yellow-500',
+      malicious: 'bg-red-500'
+    };
+    return colors[classification] || colors.safe;
+  };
+
+  const getRiskBadgeColor = (classification) => {
+    const colors = {
+      safe: 'bg-green-500/20 text-green-400 border-green-500/30',
+      suspicious: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+      malicious: 'bg-red-500/20 text-red-400 border-red-500/30'
+    };
+    return colors[classification] || colors.safe;
+  };
+
+  const getAuthBadge = (status) => {
+    if (status === 'pass') return <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-bold border border-green-500/30">✓ PASS</span>;
+    if (status === 'fail') return <span className="px-3 py-1 bg-red-500/20 text-red-400 rounded-full text-xs font-bold border border-red-500/30">✗ FAIL</span>;
+    return <span className={`px-3 py-1 rounded-full text-xs font-bold border ${isDark ? 'bg-gray-600/50 text-gray-400 border-gray-600' : 'bg-gray-300 text-gray-600 border-gray-400'}`}>— NONE</span>;
+  };
+
+  const bgPrimary = isDark ? 'bg-gray-900' : 'bg-gray-50';
+  const bgSecondary = isDark ? 'bg-gray-800' : 'bg-white';
+  const bgTertiary = isDark ? 'bg-gray-700' : 'bg-gray-100';
+  const borderColor = isDark ? 'border-gray-700' : 'border-gray-200';
+  const borderColorDark = isDark ? 'border-gray-600' : 'border-gray-300';
+  const textPrimary = isDark ? 'text-white' : 'text-gray-900';
+  const textSecondary = isDark ? 'text-gray-400' : 'text-gray-600';
+  const textTertiary = isDark ? 'text-gray-500' : 'text-gray-500';
+  const inputBg = isDark ? 'bg-gray-700' : 'bg-white';
+  const inputBorder = isDark ? 'border-gray-600' : 'border-gray-300';
+  const placeholderColor = isDark ? 'placeholder-gray-400' : 'placeholder-gray-500';
+
+  return (
+    <div className={`min-h-screen ${bgPrimary} p-6`}>
+      {/* Header */}
+      <div className="mb-8">
+        <div className={`${bgSecondary} border ${borderColor} rounded-xl shadow-xl p-8`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className={`text-4xl font-bold ${textPrimary} mb-2`}>
+                Email Threat Analyzer
+              </h1>
+              <p className={`${textSecondary} text-lg`}>AI-Powered Phishing Detection</p>
+            </div>
+            <div className="text-right">
+              <div className={`text-sm ${textSecondary}`}>Analysis Engine</div>
+              <div className={`text-lg font-semibold ${textPrimary}`}>PhishVision AI</div>
+              <div className="mt-2">
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30">
+                  ● ACTIVE
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Analysis Form */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className={`${bgSecondary} border ${borderColor} rounded-lg shadow-sm p-6`}>
+            <h2 className={`text-lg font-semibold ${textPrimary} mb-4`}>
+              Analyze Email
+            </h2>
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label className={`block text-sm font-bold ${textPrimary} mb-2`}>
+                  FROM ADDRESS
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={formData.email_from}
+                  onChange={(e) => setFormData({ ...formData, email_from: e.target.value })}
+                  className={`w-full px-4 py-3 ${inputBg} border ${inputBorder} rounded-lg ${textPrimary} ${placeholderColor} focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
+                  placeholder="sender@example.com"
+                />
+              </div>
+
+              <div>
+                <label className={`block text-sm font-bold ${textPrimary} mb-2`}>
+                  SUBJECT LINE
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.email_subject}
+                  onChange={(e) => setFormData({ ...formData, email_subject: e.target.value })}
+                  className={`w-full px-4 py-3 ${inputBg} border ${inputBorder} rounded-lg ${textPrimary} ${placeholderColor} focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
+                  placeholder="Email subject line"
+                />
+              </div>
+
+              <div>
+                <label className={`block text-sm font-bold ${textPrimary} mb-2`}>
+                  EMAIL BODY
+                </label>
+                <textarea
+                  required
+                  value={formData.email_body}
+                  onChange={(e) => setFormData({ ...formData, email_body: e.target.value })}
+                  className={`w-full px-4 py-3 ${inputBg} border ${inputBorder} rounded-lg ${textPrimary} ${placeholderColor} focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
+                  rows="8"
+                  placeholder="Paste the email body here..."
+                />
+              </div>
+
+              <div>
+                <label className={`block text-sm font-bold ${textPrimary} mb-2`}>
+                  EMAIL HEADERS <span className={`${textTertiary} font-normal`}>(Optional)</span>
+                </label>
+                <textarea
+                  value={formData.headers}
+                  onChange={(e) => setFormData({ ...formData, headers: e.target.value })}
+                  className={`w-full px-4 py-3 ${inputBg} border ${inputBorder} rounded-lg ${textPrimary} ${placeholderColor} focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-sm`}
+                  rows="4"
+                  placeholder="Received-SPF: pass&#10;DKIM-Signature: ..."
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={analyzing}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white py-4 rounded-lg font-bold text-lg transition shadow-lg"
+              >
+                {analyzing ? (
+                  <span className="flex items-center justify-center">
+                    <svg className="animate-spin h-5 w-5 mr-3" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Analyzing...
+                  </span>
+                ) : 'Analyze Email'}
+              </button>
+            </form>
+          </div>
+
+          {/* Analysis Result */}
+          {result && (
+            <div className={`${bgSecondary} border ${borderColor} rounded-lg shadow-sm p-6`}>
+              <h2 className={`text-lg font-semibold ${textPrimary} mb-4`}>
+                Analysis Report
+              </h2>
+
+              {/* Risk Classification */}
+              <div className={`${getRiskColor(result.classification)} rounded-xl p-6 mb-6 text-white shadow-lg`}>
+                <div className="flex justify-between items-center">
+                  <div>
+                    <div className="text-sm font-bold uppercase opacity-90">CLASSIFICATION</div>
+                    <div className="text-4xl font-bold capitalize mt-2">{result.classification}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-bold uppercase opacity-90">RISK SCORE</div>
+                    <div className="text-6xl font-bold">{result.risk_score}</div>
+                    <div className="text-sm opacity-90">/ 100</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Email Authentication */}
+              <div className={`${isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-100 border-gray-300'} rounded-xl p-6 mb-6 border`}>
+                <h3 className={`font-bold ${textPrimary} mb-4 text-lg`}>
+                  Email Authentication
+                </h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <div className={`text-sm ${textSecondary} mb-2`}>SPF</div>
+                    {getAuthBadge(result.spf_status)}
+                  </div>
+                  <div className="text-center">
+                    <div className={`text-sm ${textSecondary} mb-2`}>DKIM</div>
+                    {getAuthBadge(result.dkim_status)}
+                  </div>
+                  <div className="text-center">
+                    <div className={`text-sm ${textSecondary} mb-2`}>DMARC</div>
+                    {getAuthBadge(result.dmarc_status)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Explanation */}
+              <div className={`${isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-100 border-gray-300'} rounded-lg p-4 mb-4 border`}>
+                <h3 className={`font-medium ${textPrimary} mb-2 text-sm`}>
+                  Explanation
+                </h3>
+                <p className={`${isDark ? 'text-gray-300' : 'text-gray-700'} leading-relaxed whitespace-pre-line text-sm`}>{result.explanation}</p>
+              </div>
+
+              {/* Recommendations */}
+              <div className={`${isDark ? 'bg-gray-700/50 border-gray-600' : 'bg-gray-100 border-gray-300'} rounded-lg p-4 border`}>
+                <h3 className={`font-medium ${textPrimary} mb-3 text-sm`}>
+                  Recommendations
+                </h3>
+                <ul className="space-y-2">
+                  {JSON.parse(result.recommendations).map((rec, index) => (
+                    <li key={index} className={`flex items-start ${isDark ? 'text-gray-300' : 'text-gray-700'} text-sm`}>
+                      <span className="text-indigo-400 mr-2 mt-1">•</span>
+                      <span>{rec}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* History Sidebar */}
+        <div className="lg:col-span-1">
+          <div className={`${bgSecondary} border ${borderColor} rounded-xl shadow-xl p-6 sticky top-6`}>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className={`text-xl font-bold ${textPrimary}`}>
+                Recent Analyses
+              </h2>
+              {history.length > 0 && (
+                <button
+                  onClick={() => setShowClearDialog(true)}
+                  className={`text-xs px-2 py-1 rounded transition ${isDark ? 'bg-red-900/30 text-red-400 hover:bg-red-900/50' : 'bg-red-100 text-red-600 hover:bg-red-200'}`}
+                  title="Clear all history"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-3 max-h-[600px] overflow-y-auto custom-scrollbar">
+              {history.length > 0 ? (
+                history.map((item) => (
+                  <div
+                    key={item.id}
+                    className={`${isDark ? 'bg-gray-700/50 border-gray-600 hover:bg-gray-700' : 'bg-gray-100 border-gray-300 hover:bg-gray-200'} border rounded-lg p-4 transition-all duration-200 cursor-pointer`}
+                    onClick={() => setResult(item)}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold border ${getRiskBadgeColor(item.classification)}`}>
+                        {item.classification.toUpperCase()}
+                      </span>
+                      <span className={`text-2xl font-bold ${textPrimary}`}>
+                        {item.risk_score}
+                      </span>
+                    </div>
+                    <div className={`text-sm font-medium ${textPrimary} truncate mb-1`}>
+                      {item.email_subject}
+                    </div>
+                    <div className={`text-xs ${textSecondary} truncate mb-2`}>{item.email_from}</div>
+                    <div className={`text-xs ${textTertiary}`}>
+                      {new Date(item.analyzed_at).toLocaleString()}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className={`flex flex-col items-center justify-center py-12 ${textTertiary}`}>
+                  <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  <p className="text-sm text-center">No analysis history yet</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <style jsx>{`
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: ${isDark ? 'rgba(55, 65, 81, 0.3)' : 'rgba(229, 231, 235, 0.5)'};
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: ${isDark ? 'rgba(79, 70, 229, 0.5)' : 'rgba(79, 70, 229, 0.4)'};
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: ${isDark ? 'rgba(79, 70, 229, 0.8)' : 'rgba(79, 70, 229, 0.6)'};
+        }
+      `}</style>
+
+      {/* Confirmation Dialogs */}
+      <ConfirmDialog
+        isOpen={showClearDialog}
+        title="Clear Analysis History"
+        message="Are you sure you want to clear all analysis history? This action cannot be undone."
+        onConfirm={handleClearHistory}
+        onCancel={() => setShowClearDialog(false)}
+        confirmText="Clear History"
+        cancelText="Cancel"
+        type="danger"
+      />
+
+      <ConfirmDialog
+        isOpen={showSuccessDialog}
+        title="Success"
+        message="Analysis history cleared successfully."
+        onConfirm={() => setShowSuccessDialog(false)}
+        onCancel={() => setShowSuccessDialog(false)}
+        confirmText="OK"
+        cancelText="Close"
+        type="info"
+      />
+
+      <ConfirmDialog
+        isOpen={showErrorDialog}
+        title="Error"
+        message={errorMessage}
+        onConfirm={() => setShowErrorDialog(false)}
+        onCancel={() => setShowErrorDialog(false)}
+        confirmText="OK"
+        cancelText="Close"
+        type="danger"
+      />
+    </div>
+  );
+}
+
+export default EmailAnalyzer;

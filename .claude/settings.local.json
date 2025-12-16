@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip show:*)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "Bash(dir:*)",
+      "Bash(c:\\Users\\asus\\Desktop\\pishvision\\phishvision-main\\phishvision-main\\backend\\venv\\Scripts\\python.exe -m pip install:*)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(netstat:*)",
+      "Bash(venvScriptspython.exe app.py)",
+      "Bash(.venvScriptspython.exe app.py)",
+      "Bash(\"c:\\Users\\asus\\Desktop\\pishvision\\phishvision-main\\phishvision-main\\backend\\venv\\Scripts\\python.exe\" app.py)",
+      "Bash(\"c:\\Users\\asus\\Desktop\\pishvision\\phishvision-main\\phishvision-main\\backend\\venv\\Scripts\\python.exe\" -m pip uninstall weasyprint -y)",
+      "Bash(\"c:\\Users\\asus\\Desktop\\pishvision\\phishvision-main\\phishvision-main\\backend\\venv\\Scripts\\python.exe\" -c \"import xhtml2pdf; print(''xhtml2pdf version:'', xhtml2pdf.__version__)\")",
+      "Bash(\"c:\\Users\\asus\\Desktop\\pishvision\\phishvision-main\\phishvision-main\\backend\\venv\\Scripts\\python.exe\" -c \"from xhtml2pdf import pisa; import io; result = pisa.CreatePDF(io.BytesIO(b''<html><body><h1>Test</h1></body></html>''), dest=io.BytesIO()); print(''PDF generation test:'', ''SUCCESS'' if result.err == 0 else ''FAILED'')\")",
+      "Bash(powershell -Command \"(Get-Content ''routes\\campaign_report_routes.py'' | Measure-Object -Line).Lines\")",
+      "Bash(powershell -Command \"(Get-Content ''c:\\Users\\asus\\Desktop\\pishvision\\phishvision-main\\phishvision-main\\backend\\routes\\program_routes.py'' | Measure-Object -Line).Lines\")",
+      "Bash(powershell -Command \"(Get-Content ''c:\\Users\\asus\\Desktop\\pishvision\\phishvision-main\\phishvision-main\\backend\\services\\campaign_program_service.py'' | Measure-Object -Line).Lines\")",
+      "Bash(powershell -Command:*)",
+      "Bash(powershell \"Get-Content ProfilingProgramManager.js | Select-Object -First 1877 | Set-Content ProfilingProgramManager_temp.js\")",
+      "Bash(powershell:*)",
+      "Bash(\"c:\\Users\\asus\\Desktop\\pishvision\\phishvision-main\\phishvision-main\\backend\\venv\\Scripts\\python.exe\" migrationsadd_program_id_to_campaigns.py)",
+      "Bash(\"c:\\Users\\asus\\Desktop\\pishvision\\phishvision-main\\phishvision-main\\backend\\venv\\Scripts\\python.exe\" migrations/add_program_id_to_campaigns.py)",
+      "Bash(git init:*)",
+      "Bash(git config:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}

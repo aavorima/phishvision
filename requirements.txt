@@ -1,0 +1,15 @@
+# Core Framework
+Flask==3.0.0
+Flask-CORS==4.0.0
+Flask-SQLAlchemy==3.1.1
+python-dotenv==1.0.0
+
+# Email & DNS
+email-validator==2.1.0
+dnspython==2.4.2
+
+# HTTP Client
+requests==2.31.0
+
+# NLP - Using lightweight alternative to spaCy for Python 3.14 compatibility
+# Note: spaCy requires compilation. We'll use regex-based analysis instead.

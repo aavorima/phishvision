@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PhishVision Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="#00f0ff" stroke-width="2" fill="none"/>
+          <path d="M12 6l-5 3v6l5 3 5-3V9l-5-3z" fill="#00f0ff" opacity="0.3"/>
+          <circle cx="12" cy="12" r="2" fill="#00f0ff"/>
+        </svg>
+        <div>
+          <h1>PhishVision Settings</h1>
+          <p>Configure your security preferences</p>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <!-- Server Configuration -->
+      <section class="settings-section">
+        <h2>Server Configuration</h2>
+        <div class="setting-item">
+          <label for="backendUrl">Backend Server URL</label>
+          <input type="url" id="backendUrl" placeholder="http://localhost:5000">
+          <p class="hint">The PhishVision server to connect to for analysis</p>
+        </div>
+        <button id="testConnection" class="btn btn-secondary">
+          Test Connection
+        </button>
+        <span id="connectionStatus" class="status"></span>
+      </section>
+
+      <!-- Notifications -->
+      <section class="settings-section">
+        <h2>Notifications</h2>
+        <div class="setting-item">
+          <label class="toggle-label">
+            <input type="checkbox" id="enableNotifications" checked>
+            <span class="toggle"></span>
+            <span>Enable browser notifications</span>
+          </label>
+          <p class="hint">Show alerts when dangerous content is detected</p>
+        </div>
+      </section>
+
+      <!-- Monitoring -->
+      <section class="settings-section">
+        <h2>Monitoring</h2>
+        <div class="setting-item">
+          <label class="toggle-label">
+            <input type="checkbox" id="enablePassiveMonitoring">
+            <span class="toggle"></span>
+            <span>Enable passive URL monitoring</span>
+          </label>
+          <p class="hint">Automatically check URLs as you browse (may impact performance)</p>
+        </div>
+      </section>
+
+      <!-- Account -->
+      <section class="settings-section">
+        <h2>Account</h2>
+        <div id="accountInfo" class="account-info">
+          <p>Not signed in</p>
+        </div>
+        <button id="signOutBtn" class="btn btn-danger hidden">Sign Out</button>
+      </section>
+
+      <!-- Data -->
+      <section class="settings-section">
+        <h2>Data Management</h2>
+        <div class="button-group">
+          <button id="clearCache" class="btn btn-secondary">Clear URL Cache</button>
+          <button id="clearHistory" class="btn btn-secondary">Clear Scan History</button>
+        </div>
+      </section>
+
+      <!-- About -->
+      <section class="settings-section">
+        <h2>About</h2>
+        <div class="about-info">
+          <p><strong>PhishVision Security Extension</strong></p>
+          <p>Version 1.0.0</p>
+          <p class="hint">AI-powered phishing detection for your browser</p>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <button id="saveBtn" class="btn btn-primary">Save Settings</button>
+      <span id="saveStatus" class="status"></span>
+    </footer>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

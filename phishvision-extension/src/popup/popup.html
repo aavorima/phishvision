@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PhishVision Security</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="#00f0ff" stroke-width="2" fill="none"/>
+          <path d="M12 6l-5 3v6l5 3 5-3V9l-5-3z" fill="#00f0ff" opacity="0.3"/>
+          <circle cx="12" cy="12" r="2" fill="#00f0ff"/>
+        </svg>
+        <span>PhishVision</span>
+      </div>
+      <button id="settingsBtn" class="icon-btn" title="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+        </svg>
+      </button>
+    </header>
+
+    <!-- Login View -->
+    <div id="loginView" class="view">
+      <div class="login-container">
+        <h2>Sign In</h2>
+        <p class="subtitle">Connect to your PhishVision account</p>
+
+        <form id="loginForm">
+          <div class="input-group">
+            <input type="text" id="username" placeholder="Username or Email" required>
+          </div>
+          <div class="input-group">
+            <input type="password" id="password" placeholder="Password" required>
+          </div>
+          <div id="loginError" class="error-msg hidden"></div>
+          <button type="submit" class="btn btn-primary" id="loginBtn">
+            Sign In
+          </button>
+        </form>
+
+        <div class="server-info">
+          <span>Server:</span>
+          <span id="serverUrl">localhost:5000</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main View -->
+    <div id="mainView" class="view hidden">
+      <!-- Tab Navigation -->
+      <nav class="tabs">
+        <button class="tab active" data-tab="scan">Scan</button>
+        <button class="tab" data-tab="url">URL</button>
+        <button class="tab" data-tab="page">Page</button>
+        <button class="tab" data-tab="history">History</button>
+      </nav>
+
+      <!-- Tab Content -->
+      <div class="tab-content">
+        <!-- Scan Tab -->
+        <div id="scanTab" class="tab-pane active">
+          <div class="scan-form">
+            <textarea id="scanContent" placeholder="Paste suspicious email content here..." rows="5"></textarea>
+            <button id="scanBtn" class="btn btn-primary">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="M21 21l-4.35-4.35"/>
+              </svg>
+              Analyze Content
+            </button>
+          </div>
+        </div>
+
+        <!-- URL Tab -->
+        <div id="urlTab" class="tab-pane">
+          <div class="url-form">
+            <div class="input-group">
+              <input type="url" id="urlInput" placeholder="Enter URL to check...">
+              <button id="checkUrlBtn" class="btn btn-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+              </button>
+            </div>
+            <p class="hint">Or right-click any link on a page to check it</p>
+          </div>
+        </div>
+
+        <!-- Page Tab -->
+        <div id="pageTab" class="tab-pane">
+          <!-- Email Detection View -->
+          <div id="emailView" class="email-view hidden">
+            <div class="email-detected">
+              <div class="email-badge">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                  <polyline points="22,6 12,13 2,6"/>
+                </svg>
+                <span id="emailProvider">Email Detected</span>
+              </div>
+              <div class="email-info">
+                <div class="email-field">
+                  <span class="field-label">From:</span>
+                  <span id="emailSender" class="field-value">-</span>
+                </div>
+                <div class="email-field">
+                  <span class="field-label">Subject:</span>
+                  <span id="emailSubject" class="field-value">-</span>
+                </div>
+              </div>
+              <button id="analyzeEmailBtn" class="btn btn-primary">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+                Analyze This Email
+              </button>
+              <p class="hint">Check if this email is a phishing attempt</p>
+            </div>
+          </div>
+
+          <!-- Regular Page View -->
+          <div id="regularPageView" class="page-scan hidden">
+            <div class="current-page">
+              <span class="label">Current Page:</span>
+              <span id="currentUrl" class="url-display">-</span>
+            </div>
+            <button id="scanPageBtn" class="btn btn-primary">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <line x1="9" y1="3" x2="9" y2="21"/>
+              </svg>
+              Scan All Links
+            </button>
+            <p class="hint">Not on an email page? Scan links instead.</p>
+          </div>
+        </div>
+
+        <!-- History Tab -->
+        <div id="historyTab" class="tab-pane">
+          <div id="historyList" class="history-list">
+            <p class="empty-state">No recent scans</p>
+          </div>
+          <button id="clearHistoryBtn" class="btn btn-secondary btn-small">Clear History</button>
+        </div>
+      </div>
+
+      <!-- Results Section -->
+      <div id="resultsSection" class="results-section hidden">
+        <div class="results-header">
+          <h3>Analysis Results</h3>
+          <button id="closeResults" class="btn-close">&times;</button>
+        </div>
+
+        <div id="resultsContent">
+          <!-- Filled dynamically -->
+        </div>
+      </div>
+
+      <!-- User Info -->
+      <div class="user-bar">
+        <span id="userEmail">user@example.com</span>
+        <button id="logoutBtn" class="btn btn-link">Sign Out</button>
+      </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading" class="loading hidden">
+      <div class="spinner"></div>
+      <span>Analyzing...</span>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

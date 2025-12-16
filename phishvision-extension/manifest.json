@@ -1,0 +1,59 @@
+{
+  "manifest_version": 3,
+  "name": "PhishVision Security",
+  "version": "1.0.0",
+  "description": "Protect yourself from phishing attacks with AI-powered email and URL analysis",
+
+  "permissions": [
+    "storage",
+    "contextMenus",
+    "notifications",
+    "activeTab"
+  ],
+
+  "host_permissions": [
+    "http://localhost:5000/*",
+    "http://127.0.0.1:5000/*"
+  ],
+
+  "background": {
+    "service_worker": "src/background/background.js",
+    "type": "module"
+  },
+
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "src/assets/icons/icon-16.png",
+      "32": "src/assets/icons/icon-32.png",
+      "48": "src/assets/icons/icon-48.png",
+      "128": "src/assets/icons/icon-128.png"
+    },
+    "default_title": "PhishVision Security"
+  },
+
+  "icons": {
+    "16": "src/assets/icons/icon-16.png",
+    "32": "src/assets/icons/icon-32.png",
+    "48": "src/assets/icons/icon-48.png",
+    "128": "src/assets/icons/icon-128.png"
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/content.js"],
+      "css": ["src/content/inject.css"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "options_page": "src/options/options.html",
+
+  "web_accessible_resources": [
+    {
+      "resources": ["src/assets/*"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

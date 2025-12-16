@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Security Alert</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f4;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 20px;">
+        <tr>
+            <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+
+                    <!-- Header with Logo -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px 40px; text-align: center;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600; letter-spacing: -0.5px;">
+                                🛡️ Security Operations Center
+                            </h1>
+                            <p style="margin: 8px 0 0 0; color: #e0e7ff; font-size: 13px;">
+                                IT Department - Account Protection Division
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Alert Banner -->
+                    <tr>
+                        <td style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px 40px;">
+                            <table width="100%" cellpadding="0" cellspacing="0">
+                                <tr>
+                                    <td width="40" style="vertical-align: middle;">
+                                        <span style="font-size: 24px;">⚠️</span>
+                                    </td>
+                                    <td style="vertical-align: middle;">
+                                        <strong style="color: #92400e; font-size: 14px;">URGENT: Security Action Required</strong>
+                                        <p style="margin: 4px 0 0 0; color: #78350f; font-size: 12px;">
+                                            Unusual activity detected on your account
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <!-- Main Content -->
+                    <tr>
+                        <td style="padding: 40px;">
+                            <p style="margin: 0 0 16px 0; color: #1f2937; font-size: 15px; line-height: 1.6;">
+                                Dear <strong>{{full_name}}</strong>,
+                            </p>
+
+                            <p style="margin: 0 0 16px 0; color: #374151; font-size: 14px; line-height: 1.6;">
+                                Our automated security systems have detected <strong style="color: #dc2626;">suspicious login attempts</strong>
+                                from an unrecognized device trying to access your company account.
+                            </p>
+
+                            <!-- Incident Details Box -->
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; margin: 20px 0;">
+                                <tr>
+                                    <td style="padding: 20px;">
+                                        <h3 style="margin: 0 0 12px 0; color: #1f2937; font-size: 14px; font-weight: 600;">
+                                            🔍 Incident Details
+                                        </h3>
+                                        <table width="100%" cellpadding="6" cellspacing="0">
+                                            <tr>
+                                                <td style="color: #6b7280; font-size: 13px; width: 140px;">Incident ID:</td>
+                                                <td style="color: #1f2937; font-size: 13px; font-weight: 500;">SEC-2024-{{random_number}}</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="color: #6b7280; font-size: 13px;">Detection Time:</td>
+                                                <td style="color: #1f2937; font-size: 13px; font-weight: 500;">{{current_time}} UTC</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="color: #6b7280; font-size: 13px;">IP Address:</td>
+                                                <td style="color: #dc2626; font-size: 13px; font-weight: 500;">203.0.113.42 (Unknown)</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="color: #6b7280; font-size: 13px;">Location:</td>
+                                                <td style="color: #dc2626; font-size: 13px; font-weight: 500;">Moscow, Russia</td>
+                                            </tr>
+                                            <tr>
+                                                <td style="color: #6b7280; font-size: 13px;">Risk Level:</td>
+                                                <td style="color: #dc2626; font-size: 13px; font-weight: 700;">HIGH</td>
+                                            </tr>
+                                        </table>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin: 20px 0 16px 0; color: #374151; font-size: 14px; line-height: 1.6;">
+                                <strong style="color: #dc2626;">⏰ Time-Sensitive Action Required:</strong>
+                            </p>
+
+                            <p style="margin: 0 0 16px 0; color: #374151; font-size: 14px; line-height: 1.6;">
+                                To protect your account and company data, you must verify your identity within the next
+                                <strong style="color: #dc2626;">2 hours</strong>. Failure to do so will result in:
+                            </p>
+
+                            <ul style="margin: 0 0 20px 0; padding-left: 24px; color: #374151; font-size: 14px; line-height: 1.8;">
+                                <li>Temporary account suspension</li>
+                                <li>Loss of access to email and company resources</li>
+                                <li>Required in-person IT verification (2-3 business days)</li>
+                            </ul>
+
+                            <!-- CTA Button -->
+                            <table width="100%" cellpadding="0" cellspacing="0" style="margin: 30px 0;">
+                                <tr>
+                                    <td align="center">
+                                        <a href="{{tracking_link}}" style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: #ffffff; text-decoration: none; padding: 16px 40px; border-radius: 6px; font-weight: 600; font-size: 15px; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);">
+                                            🔐 Verify My Account Now
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="margin: 20px 0 0 0; color: #6b7280; font-size: 12px; line-height: 1.6; text-align: center;">
+                                Or copy and paste this link into your browser:
+                            </p>
+                            <p style="margin: 8px 0 0 0; color: #4f46e5; font-size: 12px; text-align: center; word-break: break-all;">
+                                {{tracking_link}}
+                            </p>
+
+                            <!-- Urgency Timer -->
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #fee2e2; border: 1px solid #fecaca; border-radius: 6px; margin: 30px 0 20px 0;">
+                                <tr>
+                                    <td style="padding: 16px 20px; text-align: center;">
+                                        <p style="margin: 0; color: #991b1b; font-size: 13px; font-weight: 600;">
+                                            ⏳ Countdown Timer: <span style="font-size: 16px; font-weight: 700;">01:59:45</span>
+                                        </p>
+                                        <p style="margin: 4px 0 0 0; color: #7f1d1d; font-size: 11px;">
+                                            Time remaining before automatic account lock
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #f9fafb; padding: 30px 40px; border-top: 1px solid #e5e7eb;">
+                            <p style="margin: 0 0 12px 0; color: #6b7280; font-size: 12px; line-height: 1.6;">
+                                This is an automated security notification from your IT Security Team.
+                                If you did not attempt to access your account, please verify immediately.
+                            </p>
+
+                            <table width="100%" cellpadding="0" cellspacing="0" style="margin: 16px 0;">
+                                <tr>
+                                    <td style="color: #9ca3af; font-size: 11px; line-height: 1.6;">
+                                        <strong>Security Operations Center</strong><br>
+                                        IT Department - Account Protection<br>
+                                        Email: security@company-portal.com<br>
+                                        Ticket Reference: #SEC-{{random_number}}
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+
+                            <p style="margin: 0; color: #9ca3af; font-size: 10px; text-align: center; line-height: 1.4;">
+                                © 2024 Corporate IT Security | Do not share this email<br>
+                                This message was sent to {{email}} as part of your company account security monitoring.
+                            </p>
+                        </td>
+                    </tr>
+
+                </table>
+
+                <!-- Tracking Pixel -->
+                <img src="{{tracking_pixel}}" width="1" height="1" style="display: block; margin: 20px auto 0;" alt="">
+
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
