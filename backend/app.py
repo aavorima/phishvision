@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify, send_from_directory, request
 from flask_cors import CORS
 from datetime import timedelta
 import os
@@ -18,24 +18,34 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
-# CORS configuration - allow browser extensions and frontend
+# CORS configuration - allow browser extensions, frontend, and ngrok URLs
 CORS(app,
      supports_credentials=True,
      origins=[
          "http://localhost:3000",
          "http://127.0.0.1:3000",
-         "chrome-extension://*",
-         "moz-extension://*"
      ],
      allow_headers=["Content-Type", "Authorization"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+
+# Add CORS headers for ngrok URLs via after_request
+@app.after_request
+def add_ngrok_cors(response):
+    """Add CORS headers for ngrok URLs"""
+    origin = request.headers.get('Origin', '')
+    if origin and ('.ngrok.io' in origin or '.ngrok-free.app' in origin or '.ngrok-free.dev' in origin):
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    return response
 db.init_app(app)
 
 # Import models first
 import models
 
 # Import and register blueprints
-from routes import campaign_routes, analyzer_routes, tracking_routes, dashboard_routes, template_routes, soc_routes, risk_routes, employee_routes, landing_routes, qrcode_routes, sms_routes, auth_routes, settings_routes, extension_routes, feedback_routes, threat_feed_routes, vulnerability_routes, program_routes, hvs_routes, campaign_report_routes
+from routes import campaign_routes, analyzer_routes, tracking_routes, dashboard_routes, template_routes, soc_routes, risk_routes, employee_routes, landing_routes, qrcode_routes, sms_routes, auth_routes, settings_routes, extension_routes, feedback_routes, threat_feed_routes, vulnerability_routes, program_routes, hvs_routes, campaign_report_routes, training_routes
 
 app.register_blueprint(campaign_routes.bp)
 app.register_blueprint(analyzer_routes.bp)
@@ -57,6 +67,7 @@ app.register_blueprint(vulnerability_routes.bp)  # Vulnerability profiling API
 app.register_blueprint(program_routes.bp)  # Campaign program management API
 app.register_blueprint(hvs_routes.bp)      # Human Vulnerability Score (HVS) API
 app.register_blueprint(campaign_report_routes.bp)  # Campaign Awareness Reports API
+app.register_blueprint(training_routes.bp)  # Training completion tracking API
 
 @app.route('/')
 def index():

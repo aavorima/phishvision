@@ -96,6 +96,7 @@ export const updateQRCampaign = (id, data) => axios.put(`${API_BASE_URL}/qr/camp
 export const deleteQRCampaign = (id) => axios.delete(`${API_BASE_URL}/qr/campaigns/${id}`);
 export const getQRStats = () => axios.get(`${API_BASE_URL}/qr/stats`);
 export const generateQuickQR = (data) => axios.post(`${API_BASE_URL}/qr/generate`, data, { responseType: 'blob' });
+export const sendQRPoster = (campaignId, data) => axios.post(`${API_BASE_URL}/qr/campaigns/${campaignId}/send-poster`, data);
 
 // SMS Phishing (Smishing)
 export const getSMSCampaigns = () => axios.get(`${API_BASE_URL}/sms/campaigns`);
@@ -104,7 +105,7 @@ export const createSMSCampaign = (data) => axios.post(`${API_BASE_URL}/sms/campa
 export const updateSMSCampaign = (id, data) => axios.put(`${API_BASE_URL}/sms/campaigns/${id}`, data);
 export const deleteSMSCampaign = (id) => axios.delete(`${API_BASE_URL}/sms/campaigns/${id}`);
 export const addSMSTargets = (id, data) => axios.post(`${API_BASE_URL}/sms/campaigns/${id}/targets`, data);
-export const sendSMSCampaign = (id) => axios.post(`${API_BASE_URL}/sms/campaigns/${id}/send`, {});
+export const sendSMSCampaign = (id, userId) => axios.post(`${API_BASE_URL}/sms/campaigns/${id}/send`, { user_id: userId });
 export const getSMSTemplates = () => axios.get(`${API_BASE_URL}/sms/templates`);
 export const getSMSStats = () => axios.get(`${API_BASE_URL}/sms/stats`);
 
@@ -261,6 +262,14 @@ export const getScenarioStats = (programId, scenarioId) => axios.get(`${API_BASE
 // Scenario Assignments
 export const createScenarioAssignments = (programId, scenarioId, data) => axios.post(`${API_BASE_URL}/programs/${programId}/scenarios/${scenarioId}/assignments`, data);
 export const deleteScenarioAssignment = (programId, scenarioId, assignmentId) => axios.delete(`${API_BASE_URL}/programs/${programId}/scenarios/${scenarioId}/assignments/${assignmentId}`);
+
+// Program Awareness Reports
+export const getProgramReport = (programId) => axios.get(`${API_BASE_URL}/programs/${programId}/report`);
+export const exportProgramReport = (programId, format = 'pdf') => {
+  return axios.get(`${API_BASE_URL}/programs/${programId}/report/export?format=${format}`, {
+    responseType: format === 'pdf' ? 'blob' : 'json'
+  });
+};
 
 // Default export object for convenience
 const api = {

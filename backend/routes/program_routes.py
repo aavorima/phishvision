@@ -9,7 +9,8 @@ from datetime import datetime
 from database import db
 from models import (
     User, Employee, CampaignProgram, ProgramPhase, ScheduledCampaign,
-    VulnerabilityProfile, ProgramScenario, ScenarioAssignment, CustomTemplate
+    VulnerabilityProfile, ProgramScenario, ScenarioAssignment, CustomTemplate,
+    Campaign, SMSCampaign, QRCodeCampaign
 )
 from services.campaign_program_service import CampaignProgramService
 import uuid
@@ -75,6 +76,7 @@ def get_program(program_id):
     if not program:
         return jsonify({'error': 'Program not found'}), 404
 
+    from models import Campaign, SMSCampaign, QRCodeCampaign
     result = program.to_dict(include_phases=True)
 
     # Include statistics
@@ -83,6 +85,26 @@ def get_program(program_id):
         result['stats'] = stats['summary']
         result['technique_effectiveness'] = stats['technique_effectiveness']
         result['phase_stats'] = stats['phase_stats']
+
+    # Add a summary of launched campaigns
+    email_campaigns = Campaign.query.filter_by(program_id=program_id).order_by(Campaign.created_at.desc()).all()
+    sms_campaigns = SMSCampaign.query.filter_by(program_id=program_id).order_by(SMSCampaign.created_at.desc()).all()
+    qr_campaigns = QRCodeCampaign.query.filter_by(program_id=program_id).order_by(QRCodeCampaign.created_at.desc()).all()
+
+    result['launched_campaigns_summary'] = {
+        'email': {
+            'count': len(email_campaigns),
+            'campaigns': [{'id': c.id, 'name': c.name, 'status': c.status, 'created_at': c.created_at.isoformat()} for c in email_campaigns]
+        },
+        'sms': {
+            'count': len(sms_campaigns),
+            'campaigns': [{'id': c.id, 'name': c.name, 'status': c.status, 'created_at': c.created_at.isoformat()} for c in sms_campaigns]
+        },
+        'qr': {
+            'count': len(qr_campaigns),
+            'campaigns': [{'id': c.id, 'name': c.name, 'status': c.status, 'created_at': c.created_at.isoformat()} for c in qr_campaigns]
+        }
+    }
 
     return jsonify(result)
 
@@ -241,18 +263,48 @@ def _launch_email_campaign_from_config(user, program, email_config):
             ]
 
         elif target_selection == 'manual':
-            # Parse manual email entries
+            # Parse manual email entries (format: "Name, email@example.com, Department" or "Name, email@example.com" or just "email@example.com")
             manual_emails = email_config.get('manual_emails', '')
             for line in manual_emails.split('\n'):
-                email = line.strip()
-                if email and '@' in email:
-                    # Extract name from email if possible
+                line = line.strip()
+                if not line or '@' not in line:
+                    continue
+
+                department = None
+                # Check if line contains comma (Name, Email, Department format)
+                if ',' in line:
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) >= 3:
+                        # Name, Email, Department format
+                        name = parts[0].strip()
+                        email = parts[1].strip()
+                        department = parts[2].strip()
+                    elif len(parts) == 2:
+                        # Name, Email format
+                        name = parts[0].strip()
+                        email = parts[1].strip()
+                    else:
+                        # Just email
+                        name = ''
+                        email = parts[0].strip()
+
+                    # Split name into first and last
+                    name_parts = name.split(' ', 1)
+                    first_name = name_parts[0] if len(name_parts) > 0 else ''
+                    last_name = name_parts[1] if len(name_parts) > 1 else ''
+                else:
+                    # Just email, try to parse name from email
+                    email = line
                     parsed = parse_email_to_name(email)
-                    target_recipients.append({
-                        'email': email,
-                        'first_name': parsed.get('first_name', ''),
-                        'last_name': parsed.get('last_name', '')
-                    })
+                    first_name = parsed.get('first_name', '')
+                    last_name = parsed.get('last_name', '')
+
+                target_recipients.append({
+                    'email': email,
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'department': department
+                })
 
         elif target_selection == 'csv':
             # Parse CSV content
@@ -315,17 +367,21 @@ def _launch_email_campaign_from_config(user, program, email_config):
             # Generate tracking token
             tracking_token = str(uuid.uuid4())
 
-            # Create target record
-            target = CampaignTarget(
-                campaign_id=campaign.id,
-                email=recipient['email'],
-                tracking_token=tracking_token
-            )
-            db.session.add(target)
-
             # Prepare recipient data
             first_name = recipient.get('first_name', '')
             last_name = recipient.get('last_name', '')
+            full_name = f"{first_name} {last_name}".strip() if first_name or last_name else None
+            department = recipient.get('department')
+
+            # Create target record
+            target = CampaignTarget(
+                campaign_id=campaign.id,
+                name=full_name,
+                email=recipient['email'],
+                department=department,
+                tracking_token=tracking_token
+            )
+            db.session.add(target)
             recipient_data = {
                 'first_name': first_name,
                 'last_name': last_name,
@@ -424,21 +480,61 @@ def _launch_sms_campaign_from_config(user, program, sms_config):
                 )
 
             employees = query.all()
-            target_phones = [emp.phone_number for emp in employees if emp.phone_number]
+            target_phones = [
+                {
+                    'name': f"{emp.first_name} {emp.last_name}".strip() if emp.first_name or emp.last_name else None,
+                    'phone': emp.phone_number
+                }
+                for emp in employees if emp.phone_number
+            ]
 
         elif target_selection == 'manual':
-            # Parse manual numbers
+            # Parse manual numbers (format: "Name, +994501234567, Department" or "Name, +994501234567" or just "+994501234567")
             manual_numbers = sms_config.get('manual_numbers', '')
-            target_phones = [line.strip() for line in manual_numbers.split('\n') if line.strip()]
+            target_phones = []
+            for line in manual_numbers.split('\n'):
+                line = line.strip()
+                if not line:
+                    continue
+
+                # Check if line contains comma (Name, Phone, Department format)
+                if ',' in line:
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) >= 3:
+                        # Name, Phone, Department format
+                        name = parts[0].strip()
+                        phone = parts[1].strip()
+                        department = parts[2].strip()
+                        target_phones.append({'name': name, 'phone': phone, 'department': department})
+                    elif len(parts) == 2:
+                        # Name, Phone format
+                        name = parts[0].strip()
+                        phone = parts[1].strip()
+                        target_phones.append({'name': name, 'phone': phone, 'department': None})
+                    else:
+                        # Just phone
+                        target_phones.append({'name': None, 'phone': parts[0].strip(), 'department': None})
+                else:
+                    # Just phone number
+                    target_phones.append({'name': None, 'phone': line, 'department': None})
 
         elif target_selection == 'csv':
-            # Parse CSV content
+            # Parse CSV content (format: Name,Phone or just Phone)
             csv_content = sms_config.get('csv_content', '')
             lines = csv_content.split('\n')
             for line in lines:
                 line = line.strip()
-                if line and line.startswith('+'):
-                    target_phones.append(line.split(',')[0].strip())
+                if not line:
+                    continue
+
+                if ',' in line:
+                    parts = line.split(',', 1)
+                    name = parts[0].strip()
+                    phone = parts[1].strip()
+                    if phone.startswith('+'):
+                        target_phones.append({'name': name, 'phone': phone})
+                elif line.startswith('+'):
+                    target_phones.append({'name': None, 'phone': line})
 
         if not target_phones:
             return {'error': 'No phone numbers found for SMS campaign', 'vector': 'sms'}
@@ -459,11 +555,23 @@ def _launch_sms_campaign_from_config(user, program, sms_config):
         db.session.flush()
 
         # Add targets
-        for phone in target_phones:
+        for phone_data in target_phones:
             tracking_token = str(uuid.uuid4())[:12]
+            # Handle both old format (just string) and new format (dict with name and phone)
+            if isinstance(phone_data, dict):
+                phone_number = phone_data['phone']
+                name = phone_data.get('name')
+                department = phone_data.get('department')
+            else:
+                phone_number = phone_data
+                name = None
+                department = None
+
             target = SMSTarget(
                 campaign_id=campaign.id,
-                phone_number=phone,
+                name=name,
+                phone_number=phone_number,
+                department=department,
                 tracking_token=tracking_token
             )
             db.session.add(target)
@@ -525,75 +633,265 @@ def _launch_sms_campaign_from_config(user, program, sms_config):
 
 def _launch_qr_campaign_from_config(user, program, qr_config):
     """
-    Launch QR code campaign from profiling program qr_config.
+    Create a new QR campaign for this program and send QR code posters to target employees.
 
     qr_config structure:
     {
-        "description": "Scan for WiFi access",
-        "placement": "Break room posters",
-        "target_selection": "employees",
+        "qr_campaign_id": "uuid",  // ID of template QR poster to copy from
+        "target_selection": "employees" | "manual" | "csv",
         "selected_department": "Finance",
         "search_query": "",
-        "landing_page_id": "uuid"  // optional
+        "manual_emails": "Name, email@example.com, Department\\n...",
+        "csv_data": "Name, email@example.com, Department\\n..."
     }
     """
-    from models import QRCodeCampaign, Employee
+    from models import QRCodeCampaign, Employee, Settings, QRCodeTarget
+    from services.email_service import EmailService
     import os
+    import secrets
+    from datetime import datetime
 
     try:
-        description = qr_config.get('description', 'QR Code Campaign')
-        placement = qr_config.get('placement', '')
+        # Get the template QR poster that user selected
+        template_qr_id = qr_config.get('qr_campaign_id')
+        if not template_qr_id:
+            return {'error': 'No QR poster selected', 'vector': 'qr'}
 
-        # Collect target employees (for tracking who might scan)
+        template_qr = QRCodeCampaign.query.get(template_qr_id)
+        if not template_qr:
+            return {'error': 'QR poster not found', 'vector': 'qr'}
+
+        # Collect target employees
         target_employees = []
-        department = qr_config.get('selected_department')
-        search_query = qr_config.get('search_query', '')
 
-        query = Employee.query
-        if department:
-            query = query.filter_by(department=department)
-        if search_query:
-            query = query.filter(
-                db.or_(
-                    Employee.first_name.ilike(f'%{search_query}%'),
-                    Employee.last_name.ilike(f'%{search_query}%'),
-                    Employee.department.ilike(f'%{search_query}%')
+        # Handle manual entry
+        if qr_config.get('target_selection') == 'manual' and qr_config.get('manual_emails'):
+            manual_lines = qr_config['manual_emails'].strip().split('\n')
+            for line in manual_lines:
+                if line.strip():
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) >= 2:
+                        name = parts[0] if len(parts) > 0 else ''
+                        email = parts[1] if len(parts) > 1 else ''
+                        department = parts[2] if len(parts) > 2 else ''
+                        if email:
+                            target_employees.append({
+                                'name': name,
+                                'email': email,
+                                'department': department
+                            })
+        # Handle CSV upload
+        elif qr_config.get('target_selection') == 'csv' and qr_config.get('csv_data'):
+            csv_lines = qr_config['csv_data'].strip().split('\n')
+            for line in csv_lines:
+                if line.strip():
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) >= 2:
+                        name = parts[0] if len(parts) > 0 else ''
+                        email = parts[1] if len(parts) > 1 else ''
+                        department = parts[2] if len(parts) > 2 else ''
+                        if email:
+                            target_employees.append({
+                                'name': name,
+                                'email': email,
+                                'department': department
+                            })
+        else:
+            # Handle employee selection
+            department = qr_config.get('selected_department')
+            search_query = qr_config.get('search_query', '')
+
+            query = Employee.query
+            if department:
+                query = query.filter_by(department=department)
+            if search_query:
+                query = query.filter(
+                    db.or_(
+                        Employee.first_name.ilike(f'%{search_query}%'),
+                        Employee.last_name.ilike(f'%{search_query}%'),
+                        Employee.department.ilike(f'%{search_query}%')
+                    )
                 )
-            )
 
-        target_employees = query.all()
+            employees = query.all()
+            target_employees = [
+                {
+                    'name': f"{emp.first_name} {emp.last_name}".strip() or emp.email,
+                    'email': emp.email,
+                    'department': emp.department or ''
+                }
+                for emp in employees
+            ]
 
-        # Create QR Campaign
-        base_url = os.environ.get('BASE_URL', 'http://localhost:5000')
-        tracking_token = str(uuid.uuid4())[:12]
+        if not target_employees:
+            return {'error': 'No target employees found', 'vector': 'qr'}
 
+        # CREATE NEW QR CAMPAIGN for this program (copy from template)
         campaign = QRCodeCampaign(
             name=f"{program.name} - QR Campaign",
-            description=description,
-            placement_location=placement,
-            landing_page_id=qr_config.get('landing_page_id'),
-            tracking_token=tracking_token,
-            target_url=f"{base_url}/api/qr/scan/{tracking_token}",
+            description=template_qr.description,
+            target_url=template_qr.target_url,
+            landing_page_id=template_qr.landing_page_id,
+            qr_image_path=template_qr.qr_image_path,  # Use same QR image
             status='active',
-            program_id=program.id
+            placement_location='Email Poster',
+            program_id=program.id  # LINK TO PROGRAM!
         )
         db.session.add(campaign)
+        db.session.flush()
+
+        # Get email service
+        settings = Settings.query.filter_by(user_id=user.id).first()
+        email_service = EmailService.from_user_settings(settings, allow_env_fallback=True)
+
+        if not email_service.is_configured():
+            return {'error': 'Email service is not configured. Please configure SMTP settings.', 'vector': 'qr'}
+
+        # Verify QR code image exists
+        if not campaign.qr_image_path:
+            return {'error': 'QR code image not found for this campaign', 'vector': 'qr'}
+
+        # Get QR code image path
+        import os as os_module
+        QR_CODE_DIR = os_module.path.join(os_module.path.dirname(os_module.path.dirname(__file__)), 'static', 'qrcodes')
+        qr_path = os_module.path.join(QR_CODE_DIR, campaign.qr_image_path)
+
+        if not os_module.path.exists(qr_path):
+            return {'error': f'QR code image file not found: {qr_path}', 'vector': 'qr'}
+
+        # Create QR targets (just like Email/SMS campaigns)
+        emails_sent = 0
+        emails_failed = 0
+
+        for recipient in target_employees:
+            email_addr = recipient.get('email')
+            if not email_addr:
+                continue
+
+            # Create target record
+            tracking_token = secrets.token_urlsafe(32)
+            target = QRCodeTarget(
+                campaign_id=campaign.id,
+                name=recipient.get('name'),
+                email=email_addr,
+                department=recipient.get('department'),
+                tracking_token=tracking_token,
+                sent_at=None  # Will be set after email is sent
+            )
+            db.session.add(target)
+
+        # Commit targets before sending emails
         db.session.commit()
 
-        return {
+        # Generate base tracking URL
+        import os as os_module
+        base_url = os_module.environ.get('BASE_URL', 'http://localhost:5000')
+
+        # Send poster to each recipient with personalized QR code
+        import qrcode
+        import io
+
+        for recipient in target_employees:
+            email_addr = recipient.get('email')
+            if not email_addr:
+                continue
+
+            # Find the target record to get their tracking token
+            target = QRCodeTarget.query.filter_by(campaign_id=campaign.id, email=email_addr).first()
+            if not target:
+                continue
+
+            # Generate personalized tracking URL for this target
+            tracking_url = f"{base_url}/api/qr/scan/{target.tracking_token}"
+
+            # Generate personalized QR code
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_H,
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(tracking_url)
+            qr.make(fit=True)
+
+            qr_img = qr.make_image(fill_color='#000000', back_color='white')
+
+            # Save QR code to bytes for email attachment
+            qr_bytes = io.BytesIO()
+            qr_img.save(qr_bytes, format='PNG')
+            qr_bytes.seek(0)
+
+            # Save to temp file for email attachment
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as temp_qr:
+                qr_img.save(temp_qr, format='PNG')
+                temp_qr_path = temp_qr.name
+
+            # Generate poster HTML with CID reference
+            qr_cid = f"qrcode_{target.tracking_token}"
+            email_html = f'''
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Special Offer</title>
+</head>
+<body style="font-family: Arial, sans-serif; margin: 0; padding: 0; background-color: #ffffff;">
+    <div style="max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+        <div style="text-align: center; background-color: #f8f9fa; border: 3px solid #333; border-radius: 10px; padding: 50px 40px;">
+            <h1 style="color: #333; margin: 0 0 30px 0; font-size: 32px;">Scan to Join!</h1>
+
+            {f'<p style="color: #666; font-size: 18px; margin: 0 0 40px 0; line-height: 1.5;">{campaign.description}</p>' if campaign.description else ''}
+
+            <div style="margin: 40px 0;">
+                <img src="cid:{qr_cid}" alt="QR Code" style="width: 350px; height: 350px; max-width: 100%; display: block; margin: 0 auto;">
+            </div>
+
+            <p style="color: #666; font-size: 18px; margin: 30px 0 0 0; line-height: 1.6;">
+                📱 Scan this QR code with your phone camera<br>
+                to access exclusive content!
+            </p>
+        </div>
+    </div>
+</body>
+</html>
+'''
+
+            # Use template QR poster name as subject
+            subject = template_qr.name if template_qr.name else campaign.name
+            success = email_service.send_email_with_inline_image(email_addr, subject, email_html, temp_qr_path, qr_cid)
+
+            # Clean up temp file
+            try:
+                os_module.unlink(temp_qr_path)
+            except:
+                pass
+
+            if success:
+                emails_sent += 1
+                target.sent_at = datetime.utcnow()
+            else:
+                emails_failed += 1
+
+        # Commit sent_at timestamps
+        db.session.commit()
+
+        result = {
             'vector': 'qr',
             'campaign_id': campaign.id,
             'campaign_name': campaign.name,
-            'tracking_token': tracking_token,
-            'qr_url': campaign.target_url,
-            'placement': placement,
-            'target_employees_count': len(target_employees)
+            'sent': emails_sent,
+            'failed': emails_failed,
+            'total': len(target_employees)
         }
+
+        return result
 
     except Exception as e:
         import traceback
         traceback.print_exc()
         return {'error': f'Failed to launch QR campaign: {str(e)}', 'vector': 'qr'}
+
 
 
 @bp.route('/<program_id>', methods=['PUT'])
@@ -1334,9 +1632,14 @@ def get_scheduled_campaigns(program_id):
     - page: Page number
     - per_page: Items per page
     """
+    print(f"[DEBUG] get_scheduled_campaigns called for program_id: {program_id}")
+
     program = CampaignProgram.query.get(program_id)
     if not program:
+        print(f"[DEBUG] Program not found: {program_id}")
         return jsonify({'error': 'Program not found'}), 404
+
+    print(f"[DEBUG] Program found: {program.name}")
 
     status = request.args.get('status')
     page = request.args.get('page', 1, type=int)
@@ -1359,7 +1662,13 @@ def get_scheduled_campaigns(program_id):
         total = len(campaign.targets)
         opened = sum(1 for t in campaign.targets if t.opened_at)
         clicked = sum(1 for t in campaign.targets if t.clicked_at)
-        submitted = sum(1 for t in campaign.targets if t.submitted_at)
+
+        # Get credential submissions from CredentialCapture table
+        from models import CredentialCapture
+        submitted_target_ids = set(
+            c.target_id for c in CredentialCapture.query.filter_by(campaign_id=campaign.id).all()
+        )
+        submitted = len(submitted_target_ids)
 
         campaign_dict['stats'] = {
             'total': total,
@@ -1370,6 +1679,27 @@ def get_scheduled_campaigns(program_id):
             'click_rate': round((clicked / total * 100) if total > 0 else 0, 1),
             'submit_rate': round((submitted / total * 100) if total > 0 else 0, 1)
         }
+
+        # Include targets data with details
+        campaign_dict['targets'] = [
+            {
+                'id': t.id,
+                'name': t.name if hasattr(t, 'name') else None,
+                'email': t.email,
+                'department': t.department if hasattr(t, 'department') else None,
+                'opened_at': t.opened_at.isoformat() if t.opened_at else None,
+                'clicked_at': t.clicked_at.isoformat() if t.clicked_at else None,
+                'submitted_at': (
+                    CredentialCapture.query.filter_by(target_id=t.id).first().submitted_at.isoformat()
+                    if CredentialCapture.query.filter_by(target_id=t.id).first()
+                    else None
+                ),
+                'device_type': t.user_agent if hasattr(t, 'user_agent') else None,
+                'ip_address': t.ip_address
+            }
+            for t in campaign.targets
+        ]
+
         all_campaigns.append(campaign_dict)
 
     # SMS campaigns
@@ -1385,7 +1715,16 @@ def get_scheduled_campaigns(program_id):
         # Calculate stats
         total = len(campaign.targets)
         clicked = sum(1 for t in campaign.targets if t.clicked_at)
-        submitted = sum(1 for t in campaign.targets if t.submitted_at)
+
+        # For SMS, check if there are credential submissions (via landing pages)
+        from models import CredentialCapture
+        # Find credential submissions that match the SMS targets by email
+        submitted_emails = set(t.email for t in campaign.targets if t.email)
+        submitted = 0
+        if submitted_emails:
+            submitted = CredentialCapture.query.filter(
+                CredentialCapture.email.in_(submitted_emails)
+            ).count()
 
         campaign_dict['stats'] = {
             'total': total,
@@ -1394,6 +1733,22 @@ def get_scheduled_campaigns(program_id):
             'click_rate': round((clicked / total * 100) if total > 0 else 0, 1),
             'submit_rate': round((submitted / total * 100) if total > 0 else 0, 1)
         }
+
+        # Include targets data with details
+        campaign_dict['targets'] = [
+            {
+                'id': t.id,
+                'name': t.name if hasattr(t, 'name') else None,
+                'phone_number': t.phone_number,
+                'department': t.department if hasattr(t, 'department') else None,
+                'clicked_at': t.clicked_at.isoformat() if t.clicked_at else None,
+                'submitted_at': None,  # SMS targets don't directly track submissions
+                'device_type': str(t.metadata) if hasattr(t, 'metadata') and t.metadata else None,
+                'ip_address': t.ip_address
+            }
+            for t in campaign.targets
+        ]
+
         all_campaigns.append(campaign_dict)
 
     # QR campaigns
@@ -1401,29 +1756,112 @@ def get_scheduled_campaigns(program_id):
     if status:
         qr_campaigns = qr_campaigns.filter_by(status=status)
 
+    print(f"[DEBUG] Found {qr_campaigns.count()} QR campaigns for program {program_id}")
+
     for campaign in qr_campaigns.all():
+        print(f"[DEBUG] Processing QR campaign: {campaign.name} (ID: {campaign.id})")
+
         campaign_dict = campaign.to_dict()
         campaign_dict['type'] = 'qr'
-        campaign_dict['scans_count'] = len(campaign.scans)
+        campaign_dict['targets_count'] = len(campaign.targets)
 
-        # Calculate stats
-        total_scans = len(campaign.scans)
-        unique_devices = len(set(scan.device_info for scan in campaign.scans if scan.device_info))
+        # Calculate stats from targets
+        total = len(campaign.targets)
+        scanned = sum(1 for t in campaign.targets if t.scanned_at)
+
+        # Get credential submissions for this QR campaign
+        from models import CredentialCapture
+        submitted_count = 0
+        if campaign.landing_page_id:
+            submitted_count = CredentialCapture.query.filter_by(
+                campaign_id=campaign.id
+            ).count()
 
         campaign_dict['stats'] = {
-            'total_scans': total_scans,
-            'unique_devices': unique_devices
+            'total': total,
+            'total_scans': scanned,
+            'submitted': submitted_count,
+            'scan_rate': round((scanned / total * 100) if total > 0 else 0, 1),
+            'submit_rate': round((submitted_count / total * 100) if total > 0 else 0, 1)
         }
+
+        # Include targets data with details (like Email/SMS campaigns)
+        targets_with_details = []
+        for target in campaign.targets:
+            # Check if this target submitted credentials
+            submitted_cred = None
+            if campaign.landing_page_id and target.scanned_at:
+                submitted_cred = CredentialCapture.query.filter(
+                    CredentialCapture.campaign_id == campaign.id,
+                    CredentialCapture.submitted_at >= target.scanned_at
+                ).order_by(CredentialCapture.submitted_at.asc()).first()
+
+            target_data = {
+                'id': target.id,
+                'name': target.name,
+                'email': target.email,
+                'department': target.department,
+                'sent_at': target.sent_at.isoformat() if target.sent_at else None,
+                'scanned_at': target.scanned_at.isoformat() if target.scanned_at else None,
+                'submitted_at': submitted_cred.submitted_at.isoformat() if submitted_cred else None,
+                'device_type': target.user_agent if target.user_agent else None,
+                'ip_address': target.ip_address
+            }
+            targets_with_details.append(target_data)
+
+        campaign_dict['targets'] = targets_with_details
+        campaign_dict['scans'] = targets_with_details  # For backwards compatibility
+
+        print(f"[DEBUG] QR campaign dict keys: {campaign_dict.keys()}")
+        print(f"[DEBUG] QR campaign has {len(targets_with_details)} targets")
+
         all_campaigns.append(campaign_dict)
 
     # Sort by created_at descending
     all_campaigns.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+
+    print(f"[DEBUG] Total campaigns found: {len(all_campaigns)}")
+    for camp in all_campaigns:
+        print(f"[DEBUG]   - {camp.get('type')}: {camp.get('name')} (targets: {camp.get('targets_count', 0)})")
 
     # Manual pagination
     total = len(all_campaigns)
     start = (page - 1) * per_page
     end = start + per_page
     paginated_campaigns = all_campaigns[start:end]
+
+    print(f"[DEBUG] Returning {len(paginated_campaigns)} campaigns after pagination")
+
+    # Print summary of what we're returning
+    print("[DEBUG] FINAL RESPONSE SUMMARY:")
+    for camp in paginated_campaigns:
+        print(f"[DEBUG]   - Type: {camp.get('type')}, Name: {camp.get('name')}, ID: {camp.get('id')}")
+        if camp.get('type') == 'email':
+            print(f"[DEBUG]     Email stats: {camp.get('stats')}")
+        elif camp.get('type') == 'sms':
+            print(f"[DEBUG]     SMS stats: {camp.get('stats')}")
+        elif camp.get('type') == 'qr':
+            print(f"[DEBUG]     QR stats: {camp.get('stats')}, Scans count: {len(camp.get('scans', []))}")
+
+    # Debug: Check if any campaign has problematic objects
+    import json
+    try:
+        test_json = json.dumps(paginated_campaigns)
+        print("[DEBUG] Campaigns JSON serialization test passed")
+    except TypeError as e:
+        print(f"[DEBUG] JSON serialization test FAILED: {e}")
+        # Find which campaign has the issue
+        for i, camp in enumerate(paginated_campaigns):
+            try:
+                json.dumps(camp)
+            except TypeError as e2:
+                print(f"[DEBUG] Campaign {i} ({camp.get('name')}) failed: {e2}")
+                # Find which key has the issue
+                for key, value in camp.items():
+                    try:
+                        json.dumps({key: value})
+                    except TypeError as e3:
+                        print(f"[DEBUG]   Key '{key}' has non-serializable value: {type(value)}")
 
     return jsonify({
         'campaigns': paginated_campaigns,
@@ -1496,3 +1934,320 @@ def get_employee_program_history(employee_id):
         'history': history,
         'total': len(history)
     })
+
+
+# ========================================
+#  PROGRAM AWARENESS REPORT ENDPOINTS
+# ========================================
+
+@bp.route('/<program_id>/report', methods=['GET'])
+def get_program_report(program_id):
+    """
+    Generate and return awareness report for a profiling program
+
+    Returns comprehensive analysis including:
+    - Program overview
+    - Company-level awareness summary across all campaigns
+    - Campaign breakdown (email, SMS, QR)
+    - Individual employee results across all vectors
+    - Department risk breakdown
+    - Identified security gaps and training recommendations
+    """
+    try:
+        from services.program_report_service import ProgramReportService
+
+        # Verify program exists
+        program = CampaignProgram.query.get(program_id)
+        if not program:
+            return jsonify({'error': 'Program not found'}), 404
+
+        # Generate report
+        report = ProgramReportService.generate_report(program_id)
+
+        if 'error' in report:
+            return jsonify(report), 400
+
+        return jsonify(report), 200
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/<program_id>/report/export', methods=['GET'])
+def export_program_report(program_id):
+    """
+    Export program report in various formats (JSON, PDF)
+    """
+    try:
+        from services.program_report_service import ProgramReportService
+        from flask import send_file
+        import io
+
+        program = CampaignProgram.query.get(program_id)
+        if not program:
+            return jsonify({'error': 'Program not found'}), 404
+
+        # Get export format (default: json)
+        export_format = request.args.get('format', 'json').lower()
+
+        # Generate report
+        report = ProgramReportService.generate_report(program_id)
+
+        if 'error' in report:
+            return jsonify(report), 400
+
+        if export_format == 'json':
+            return jsonify(report), 200
+
+        elif export_format == 'pdf':
+            # Generate professional PDF report
+            try:
+                from xhtml2pdf import pisa
+
+                overview = report['overview']
+                summary = report['awareness_summary']
+                campaign_breakdown = report['campaign_breakdown']
+                gaps = report['security_gaps']
+                departments = report['department_breakdown'][:10]
+                employees = report['employee_results'][:50]  # Top 50 employees
+
+                # Combine all campaigns for the table
+                all_campaigns = []
+                all_campaigns.extend(campaign_breakdown.get('email_campaigns', []))
+                all_campaigns.extend(campaign_breakdown.get('sms_campaigns', []))
+                all_campaigns.extend(campaign_breakdown.get('qr_campaigns', []))
+
+                # Helper function for risk badge styling
+                def get_risk_badge(level):
+                    colors = {
+                        'critical': '#dc2626',
+                        'high': '#f97316',
+                        'medium': '#f59e0b',
+                        'low': '#10b981'
+                    }
+                    color = colors.get(level.lower(), '#6b7280')
+                    return f'<span style="background:{color};color:white;padding:2px 8px;font-size:9pt;font-weight:bold;border-radius:3px;">{level.upper()}</span>'
+
+                # Build HTML content
+                html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Profiling Program Awareness Report</title>
+    <style>
+        @page {{ size: A4; margin: 25mm; }}
+        body {{ font-family: 'Helvetica', 'Arial', sans-serif; font-size: 11pt; line-height: 1.4; color: #1f2937; }}
+
+        /* Header */
+        .report-header {{ text-align: center; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 3px solid #2563eb; }}
+        .report-title {{ font-size: 24pt; font-weight: bold; color: #1e40af; margin: 8px 0; }}
+        .program-name {{ font-size: 14pt; color: #4b5563; margin: 5px 0; font-style: italic; }}
+        .report-date {{ font-size: 9pt; color: #6b7280; margin-top: 5px; }}
+
+        /* Sections */
+        h2 {{ font-size: 14pt; font-weight: bold; color: #1f2937; margin: 25px 0 10px 0; padding-bottom: 4px; border-bottom: 2px solid #e5e7eb; }}
+        h2:first-of-type {{ margin-top: 15px; }}
+        h3 {{ font-size: 12pt; font-weight: bold; color: #374151; margin: 15px 0 8px 0; }}
+        p {{ margin: 5px 0; }}
+
+        /* Score Display */
+        .score-box {{ text-align: center; background: #eff6ff; border: 2px solid #2563eb; padding: 12px; margin: 10px 0; }}
+        .score-number {{ font-size: 36pt; font-weight: bold; color: #1e40af; }}
+        .score-label {{ font-size: 11pt; color: #6b7280; margin-top: 3px; }}
+
+        /* Behavior List */
+        .behavior-list {{ margin: 8px 0; }}
+        .behavior-item {{ padding: 4px 0; border-bottom: 1px solid #e5e7eb; }}
+        .behavior-label {{ display: inline-block; width: 180px; font-weight: bold; color: #374151; }}
+
+        /* Tables */
+        table {{ width: 100%; border-collapse: collapse; margin: 10px 0; }}
+        th {{ background: #1e40af; color: white; font-weight: bold; text-align: left; padding: 8px; font-size: 10pt; }}
+        td {{ padding: 6px 8px; border-bottom: 1px solid #e5e7eb; font-size: 9pt; }}
+        tr:nth-child(even) {{ background: #f9fafb; }}
+
+        /* Security Gaps */
+        .gap-item {{ margin: 8px 0; padding: 8px; border-left: 4px solid #f59e0b; background: #fef3c7; }}
+        .gap-title {{ font-weight: bold; color: #92400e; margin-bottom: 3px; }}
+        .gap-desc {{ font-size: 9pt; color: #78350f; }}
+
+        /* Page Break */
+        .page-break {{ page-break-before: always; }}
+
+        /* Footer */
+        .footer {{ margin-top: 20px; padding-top: 10px; border-top: 2px solid #e5e7eb; text-align: center; font-size: 8pt; color: #6b7280; }}
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <div class="report-header">
+        <div style="font-size:11pt;font-weight:bold;color:#2563eb;">PhishVision Security Awareness Platform</div>
+        <div class="report-title">Profiling Program Awareness Report</div>
+        <div class="program-name">{overview['program_name']}</div>
+        <div class="report-date">Generated on {datetime.fromisoformat(report['generated_at']).strftime('%B %d, %Y at %I:%M %p')}</div>
+    </div>
+
+    <!-- Program Overview -->
+    <h2>Program Overview</h2>
+    <p><strong>Description:</strong> {overview['program_description']}</p>
+    <p><strong>Status:</strong> {overview['status']}</p>
+    <p><strong>Total Campaigns:</strong> {overview['total_campaigns']} ({overview['email_campaigns']} Email, {overview['sms_campaigns']} SMS, {overview['qr_campaigns']} QR Code)</p>
+    <p><strong>Total Targets:</strong> {overview['total_targets']} interactions</p>
+
+    <!-- Company Awareness Score -->
+    <h2>Company-Level Awareness Summary</h2>
+    <div class="score-box">
+        <div class="score-number">{summary['awareness_score']}/100</div>
+        <div class="score-label">Awareness Level: <strong>{summary['awareness_level']}</strong></div>
+    </div>
+
+    <h3>Employee Behavior Breakdown</h3>
+    <div class="behavior-list">
+        <div class="behavior-item">
+            <span class="behavior-label">No Interaction:</span>
+            <span>{summary['no_interaction_count']} ({summary['no_interaction_percent']}%)</span>
+        </div>
+        <div class="behavior-item">
+            <span class="behavior-label">Clicked/Interacted:</span>
+            <span>{summary['clicked_count']} ({summary['clicked_percent']}%)</span>
+        </div>
+        <div class="behavior-item">
+            <span class="behavior-label">Submitted Credentials:</span>
+            <span>{summary['submitted_credentials_count']} ({summary['submitted_percent']}%)</span>
+        </div>
+    </div>
+
+    <!-- Campaign Breakdown -->
+    <h2>Campaign Breakdown</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Campaign Name</th>
+                <th>Type</th>
+                <th>Targets</th>
+                <th>Click Rate</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {''.join([f'''
+            <tr>
+                <td>{camp.get('campaign_name') or camp.get('name', 'Unknown')}</td>
+                <td>{camp.get('type', 'Unknown')}</td>
+                <td>{camp.get('total_targets', 0)}</td>
+                <td>{camp.get('clicked_rate') or camp.get('click_rate', 0)}%</td>
+                <td>{camp.get('status', 'N/A')}</td>
+            </tr>
+            ''' for camp in all_campaigns])}
+        </tbody>
+    </table>
+
+    <!-- Department Risk Breakdown -->
+    <h2>Department Risk Breakdown</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Department</th>
+                <th>Employees</th>
+                <th>Click Rate</th>
+                <th>Risk Level</th>
+            </tr>
+        </thead>
+        <tbody>
+            {''.join([f'''
+            <tr>
+                <td>{dept['department']}</td>
+                <td>{dept['total_employees']}</td>
+                <td>{dept['click_rate']}%</td>
+                <td>{get_risk_badge(dept['risk_level'])}</td>
+            </tr>
+            ''' for dept in departments])}
+        </tbody>
+    </table>
+
+    <!-- Individual Employee Results -->
+    <div class="page-break"></div>
+    <h2>Individual Employee Results (Top 50)</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Department</th>
+                <th>Outcome</th>
+                <th>Risk Level</th>
+                <th>Training</th>
+            </tr>
+        </thead>
+        <tbody>
+            {''.join([f'''
+            <tr>
+                <td>{emp['name']}</td>
+                <td>{emp['department']}</td>
+                <td>{emp['outcome_label']}</td>
+                <td>{get_risk_badge(emp['risk_level'])}</td>
+                <td>{'<strong>Yes</strong>' if emp.get('training_recommended', False) else 'No'}</td>
+            </tr>
+            ''' for emp in employees])}
+        </tbody>
+    </table>
+
+    <!-- Identified Security Gaps -->
+    <h2>Identified Security Gaps & Recommendations</h2>
+    <p><strong>Overall Risk Level:</strong> {get_risk_badge(gaps['overall_risk_level'])}</p>
+    <p>{gaps.get('summary', 'Security gap analysis completed.')}</p>
+
+    <h3>Detailed Findings</h3>
+    {''.join([f'''
+    <div class="gap-item">
+        <div class="gap-title">{gap['category']}: {gap['finding']}</div>
+        <div class="gap-desc"><strong>Recommendation:</strong> {gap['recommendation']}</div>
+    </div>
+    ''' for gap in gaps.get('gaps', [])])}
+
+    <!-- Footer -->
+    <div class="footer">
+        Generated by PhishVision Security Awareness Platform<br>
+        Confidential - For Internal Use Only
+    </div>
+</body>
+</html>
+"""
+
+                # Generate PDF from HTML
+                pdf_file = io.BytesIO()
+                pisa_status = pisa.CreatePDF(html_content, dest=pdf_file)
+
+                if pisa_status.err:
+                    return jsonify({'error': 'Error generating PDF'}), 500
+
+                pdf_file.seek(0)
+
+                # Generate filename
+                program_name_clean = "".join(c for c in program.name if c.isalnum() or c in (' ', '-', '_')).strip()
+                filename = f"Program_Report_{program_name_clean}_{datetime.now().strftime('%Y%m%d')}.pdf"
+
+                # Return PDF file
+                return send_file(
+                    pdf_file,
+                    mimetype='application/pdf',
+                    as_attachment=True,
+                    download_name=filename
+                )
+
+            except ImportError:
+                return jsonify({'error': 'xhtml2pdf library not installed. Run: pip install xhtml2pdf'}), 500
+            except Exception as pdf_error:
+                import traceback
+                traceback.print_exc()
+                return jsonify({'error': f'Error generating PDF document: {str(pdf_error)}'}), 500
+
+        else:
+            return jsonify({'error': f'Export format "{export_format}" not supported. Use: json, pdf'}), 400
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500

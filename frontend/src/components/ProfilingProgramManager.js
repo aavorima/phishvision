@@ -18,7 +18,9 @@ import {
   getEmployees,
   getLandingPages,
   getSMSTemplates,
-  getCampaign
+  getCampaign,
+  getProgramReport,
+  getQRCampaigns
 } from '../api/api';
 
 const VECTORS = [
@@ -49,27 +51,51 @@ const ProgramDetailsModal = ({ program, onClose, isDarkMode }) => {
     try {
       setLoading(true);
 
+      console.log('[DEBUG] Loading campaigns for program:', program.id, program.name);
+
       // Get all campaigns associated with this program
       const response = await getProgramCampaigns(program.id);
+
+      console.log('[DEBUG] API Response:', response);
+      console.log('[DEBUG] Response data:', response.data);
+      console.log('[DEBUG] Response data.campaigns:', response.data?.campaigns);
+
       const campaignsData = response.data.campaigns || response.data || [];
+      console.log('[DEBUG] Campaigns array:', campaignsData);
+      console.log('[DEBUG] Campaigns count:', campaignsData.length);
+
       setCampaigns(campaignsData);
 
       // Separate campaigns by vector type
-      for (const campaign of campaignsData) {
-        const campaignDetails = await getCampaign(campaign.id);
-        const details = campaignDetails.data;
+      let email = null;
+      let sms = null;
+      let qr = null;
 
-        // Determine campaign type by name pattern
-        if (details.name.includes('Email')) {
-          setEmailCampaign(details);
-        } else if (details.name.includes('SMS')) {
-          setSmsCampaign(details);
-        } else if (details.name.includes('QR')) {
-          setQrCampaign(details);
+      for (const campaign of campaignsData) {
+        console.log('[DEBUG] Processing campaign:', campaign.name, 'Type:', campaign.type);
+        // Determine campaign type from the 'type' field returned by backend
+        if (campaign.type === 'email') {
+          email = campaign;
+          console.log('[DEBUG] Found email campaign:', campaign.name);
+        } else if (campaign.type === 'sms') {
+          sms = campaign;
+          console.log('[DEBUG] Found SMS campaign:', campaign.name);
+        } else if (campaign.type === 'qr') {
+          qr = campaign;
+          console.log('[DEBUG] Found QR campaign:', campaign.name);
         }
       }
+
+      console.log('[DEBUG] Setting state - Email:', email?.name, 'SMS:', sms?.name, 'QR:', qr?.name);
+
+      // Set all state at once
+      setEmailCampaign(email);
+      setSmsCampaign(sms);
+      setQrCampaign(qr);
     } catch (error) {
       console.error('Error loading program campaigns:', error);
+      console.error('Error details:', error.response?.data);
+      console.error('Error status:', error.response?.status);
     } finally {
       setLoading(false);
     }
@@ -157,11 +183,122 @@ const ProgramDetailsModal = ({ program, onClose, isDarkMode }) => {
 // Email/General Vector Results Component
 const VectorResults = ({ vectorName, vectorIcon, campaign, isDarkMode }) => {
   const targets = campaign.targets || [];
-  const totalTargets = targets.length;
-  const opened = targets.filter(t => t.opened_at).length;
-  const clicked = targets.filter(t => t.clicked_at).length;
-  const openRate = totalTargets > 0 ? ((opened / totalTargets) * 100).toFixed(1) : 0;
-  const clickRate = totalTargets > 0 ? ((clicked / totalTargets) * 100).toFixed(1) : 0;
+  const stats = campaign.stats || {};
+
+  // Use stats from backend if available, otherwise calculate from targets
+  const totalTargets = stats.total || targets.length;
+  const opened = stats.opened || targets.filter(t => t.opened_at).length;
+  const clicked = stats.clicked || targets.filter(t => t.clicked_at).length;
+  const submitted = stats.submitted || targets.filter(t => t.submitted_at).length;
+  const openRate = stats.open_rate || (totalTargets > 0 ? ((opened / totalTargets) * 100).toFixed(1) : 0);
+  const clickRate = stats.click_rate || (totalTargets > 0 ? ((clicked / totalTargets) * 100).toFixed(1) : 0);
+  const submitRate = stats.submit_rate || (totalTargets > 0 ? ((submitted / totalTargets) * 100).toFixed(1) : 0);
+
+  return (
+    <div className={`border rounded-lg p-6 ${isDarkMode ? 'border-gray-700 bg-gray-900/50' : 'border-gray-200 bg-gray-50'}`}>
+      <div className="flex items-center mb-4">
+        <span className="text-3xl mr-3">{vectorIcon}</span>
+        <div>
+          <h3 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+            {vectorName}
+          </h3>
+          <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+            Campaign: {campaign.name}
+          </p>
+        </div>
+      </div>
+
+      {/* Statistics Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total Sent</div>
+          <div className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{totalTargets}</div>
+        </div>
+        <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Opened</div>
+          <div className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{opened}</div>
+          <div className="text-sm text-blue-500">{openRate}% rate</div>
+        </div>
+        <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Clicked</div>
+          <div className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{clicked}</div>
+          <div className="text-sm text-orange-500">{clickRate}% rate</div>
+        </div>
+        <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Submitted Credentials</div>
+          <div className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{submitted}</div>
+          <div className="text-sm text-red-500">{submitRate}% rate</div>
+        </div>
+        <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Not Opened</div>
+          <div className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{totalTargets - opened}</div>
+        </div>
+      </div>
+
+      {/* Target Details Table */}
+      <div className={`rounded-lg overflow-hidden border ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+        <table className="w-full">
+          <thead className={isDarkMode ? 'bg-gray-800' : 'bg-gray-100'}>
+            <tr>
+              <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Name</th>
+              <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Email</th>
+              <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Department</th>
+              <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Opened</th>
+              <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Clicked</th>
+              <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Submitted</th>
+              <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Device</th>
+            </tr>
+          </thead>
+          <tbody className={isDarkMode ? 'bg-gray-900' : 'bg-white'}>
+            {targets.map((target, index) => (
+              <tr key={target.id || index} className={`border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                <td className={`px-4 py-3 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>{target.name || '-'}</td>
+                <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>{target.email}</td>
+                <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{target.department || '-'}</td>
+                <td className="px-4 py-3 text-sm">
+                  {target.opened_at ? (
+                    <span className="text-blue-500">✓ {new Date(target.opened_at).toLocaleDateString('en-US')}</span>
+                  ) : (
+                    <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>-</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-sm">
+                  {target.clicked_at ? (
+                    <span className="text-orange-500">✓ {new Date(target.clicked_at).toLocaleDateString('en-US')}</span>
+                  ) : (
+                    <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>-</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-sm">
+                  {target.submitted_at ? (
+                    <span className="text-red-500">✓ {new Date(target.submitted_at).toLocaleDateString('en-US')}</span>
+                  ) : (
+                    <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>-</span>
+                  )}
+                </td>
+                <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                  {target.device_type || '-'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// SMS Vector Results Component
+const SMSVectorResults = ({ vectorName, vectorIcon, campaign, isDarkMode }) => {
+  const targets = campaign.targets || [];
+  const stats = campaign.stats || {};
+
+  // Use stats from backend if available, otherwise calculate from targets
+  const totalTargets = stats.total || targets.length;
+  const clicked = stats.clicked || targets.filter(t => t.clicked_at).length;
+  const submitted = stats.submitted || targets.filter(t => t.submitted_at).length;
+  const clickRate = stats.click_rate || (totalTargets > 0 ? ((clicked / totalTargets) * 100).toFixed(1) : 0);
+  const submitRate = stats.submit_rate || (totalTargets > 0 ? ((submitted / totalTargets) * 100).toFixed(1) : 0);
 
   return (
     <div className={`border rounded-lg p-6 ${isDarkMode ? 'border-gray-700 bg-gray-900/50' : 'border-gray-200 bg-gray-50'}`}>
@@ -184,18 +321,18 @@ const VectorResults = ({ vectorName, vectorIcon, campaign, isDarkMode }) => {
           <div className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{totalTargets}</div>
         </div>
         <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Opened</div>
-          <div className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{opened}</div>
-          <div className="text-sm text-blue-500">{openRate}% rate</div>
-        </div>
-        <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Clicked</div>
+          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Link Clicked</div>
           <div className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{clicked}</div>
-          <div className="text-sm text-red-500">{clickRate}% rate</div>
+          <div className="text-sm text-orange-500">{clickRate}% rate</div>
         </div>
         <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Not Opened</div>
-          <div className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{totalTargets - opened}</div>
+          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Submitted Credentials</div>
+          <div className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{submitted}</div>
+          <div className="text-sm text-red-500">{submitRate}% rate</div>
+        </div>
+        <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
+          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Not Clicked</div>
+          <div className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{totalTargets - clicked}</div>
         </div>
       </div>
 
@@ -204,36 +341,36 @@ const VectorResults = ({ vectorName, vectorIcon, campaign, isDarkMode }) => {
         <table className="w-full">
           <thead className={isDarkMode ? 'bg-gray-800' : 'bg-gray-100'}>
             <tr>
-              <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Email</th>
-              <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Opened</th>
+              <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Name</th>
+              <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Phone Number</th>
+              <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Department</th>
               <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Clicked</th>
+              <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Submitted</th>
               <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Device</th>
-              <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>IP Address</th>
             </tr>
           </thead>
           <tbody className={isDarkMode ? 'bg-gray-900' : 'bg-white'}>
             {targets.map((target, index) => (
               <tr key={target.id || index} className={`border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>{target.email}</td>
+                <td className={`px-4 py-3 text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-900'}`}>{target.name || '-'}</td>
+                <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>{target.phone_number}</td>
+                <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>{target.department || '-'}</td>
                 <td className="px-4 py-3 text-sm">
-                  {target.opened_at ? (
-                    <span className="text-blue-500">✓ {new Date(target.opened_at).toLocaleString()}</span>
+                  {target.clicked_at ? (
+                    <span className="text-orange-500">✓ {new Date(target.clicked_at).toLocaleDateString('en-US')}</span>
                   ) : (
                     <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>-</span>
                   )}
                 </td>
                 <td className="px-4 py-3 text-sm">
-                  {target.clicked_at ? (
-                    <span className="text-red-500">✓ {new Date(target.clicked_at).toLocaleString()}</span>
+                  {target.submitted_at ? (
+                    <span className="text-red-500">✓ {new Date(target.submitted_at).toLocaleDateString('en-US')}</span>
                   ) : (
                     <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>-</span>
                   )}
                 </td>
                 <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                   {target.device_type || '-'}
-                </td>
-                <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {target.ip_address || '-'}
                 </td>
               </tr>
             ))}
@@ -244,12 +381,16 @@ const VectorResults = ({ vectorName, vectorIcon, campaign, isDarkMode }) => {
   );
 };
 
-// SMS Vector Results Component
-const SMSVectorResults = ({ vectorName, vectorIcon, campaign, isDarkMode }) => {
-  const targets = campaign.targets || [];
-  const totalTargets = targets.length;
-  const clicked = targets.filter(t => t.clicked_at).length;
-  const clickRate = totalTargets > 0 ? ((clicked / totalTargets) * 100).toFixed(1) : 0;
+// QR Vector Results Component
+const QRVectorResults = ({ vectorName, vectorIcon, campaign, isDarkMode }) => {
+  const scans = campaign.scans || [];
+  const stats = campaign.stats || {};
+
+  // Calculate statistics
+  const totalScans = stats.total_scans !== undefined ? stats.total_scans : scans.length;
+  const submitted = stats.submitted !== undefined ? stats.submitted : scans.filter(s => s.submitted_credentials).length;
+  const submitRate = totalScans > 0 ? ((submitted / totalScans) * 100).toFixed(1) : 0;
+  const notScanned = stats.total_generated ? stats.total_generated - totalScans : 0;
 
   return (
     <div className={`border rounded-lg p-6 ${isDarkMode ? 'border-gray-700 bg-gray-900/50' : 'border-gray-200 bg-gray-50'}`}>
@@ -266,87 +407,16 @@ const SMSVectorResults = ({ vectorName, vectorIcon, campaign, isDarkMode }) => {
       </div>
 
       {/* Statistics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
-        <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total Sent</div>
-          <div className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{totalTargets}</div>
-        </div>
-        <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Link Clicked</div>
-          <div className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{clicked}</div>
-          <div className="text-sm text-red-500">{clickRate}% rate</div>
-        </div>
-        <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Not Clicked</div>
-          <div className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{totalTargets - clicked}</div>
-        </div>
-      </div>
-
-      {/* Target Details Table */}
-      <div className={`rounded-lg overflow-hidden border ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-        <table className="w-full">
-          <thead className={isDarkMode ? 'bg-gray-800' : 'bg-gray-100'}>
-            <tr>
-              <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Phone Number</th>
-              <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Clicked</th>
-              <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Device</th>
-              <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>IP Address</th>
-            </tr>
-          </thead>
-          <tbody className={isDarkMode ? 'bg-gray-900' : 'bg-white'}>
-            {targets.map((target, index) => (
-              <tr key={target.id || index} className={`border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-                <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>{target.phone_number}</td>
-                <td className="px-4 py-3 text-sm">
-                  {target.clicked_at ? (
-                    <span className="text-red-500">✓ {new Date(target.clicked_at).toLocaleString()}</span>
-                  ) : (
-                    <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>-</span>
-                  )}
-                </td>
-                <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {target.device_type || '-'}
-                </td>
-                <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {target.ip_address || '-'}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-};
-
-// QR Vector Results Component
-const QRVectorResults = ({ vectorName, vectorIcon, campaign, isDarkMode }) => {
-  const scans = campaign.scans || [];
-  const totalScans = scans.length;
-
-  return (
-    <div className={`border rounded-lg p-6 ${isDarkMode ? 'border-gray-700 bg-gray-900/50' : 'border-gray-200 bg-gray-50'}`}>
-      <div className="flex items-center mb-4">
-        <span className="text-3xl mr-3">{vectorIcon}</span>
-        <div>
-          <h3 className={`text-xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-            {vectorName}
-          </h3>
-          <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-            Campaign: {campaign.name}
-          </p>
-        </div>
-      </div>
-
-      {/* Statistics */}
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
           <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Total Scans</div>
           <div className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{totalScans}</div>
+          <div className="text-sm text-blue-500">QR code scanned {totalScans} {totalScans === 1 ? 'time' : 'times'}</div>
         </div>
         <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-gray-800' : 'bg-white'}`}>
-          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Placement</div>
-          <div className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{campaign.placement_location || 'Not specified'}</div>
+          <div className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>Submitted Credentials</div>
+          <div className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>{submitted}</div>
+          <div className="text-sm text-red-500">{submitRate}% submit rate</div>
         </div>
       </div>
 
@@ -356,22 +426,34 @@ const QRVectorResults = ({ vectorName, vectorIcon, campaign, isDarkMode }) => {
           <table className="w-full">
             <thead className={isDarkMode ? 'bg-gray-800' : 'bg-gray-100'}>
               <tr>
+                <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Email</th>
+                <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Department</th>
                 <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Scanned At</th>
+                <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Submitted</th>
                 <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Device</th>
-                <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>IP Address</th>
               </tr>
             </thead>
             <tbody className={isDarkMode ? 'bg-gray-900' : 'bg-white'}>
-              {scans.map((scan, index) => (
+              {scans.filter(scan => scan.scanned_at).map((scan, index) => (
                 <tr key={scan.id || index} className={`border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
                   <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>
-                    {new Date(scan.scanned_at).toLocaleString()}
+                    {scan.email || scan.user_email || '-'}
+                  </td>
+                  <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                    {scan.department || '-'}
+                  </td>
+                  <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>
+                    {new Date(scan.scanned_at).toLocaleDateString('en-US')}
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    {scan.submitted_at ? (
+                      <span className="text-red-500">✓ {new Date(scan.submitted_at).toLocaleDateString('en-US')}</span>
+                    ) : (
+                      <span className={isDarkMode ? 'text-gray-500' : 'text-gray-400'}>-</span>
+                    )}
                   </td>
                   <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                     {scan.device_type || '-'}
-                  </td>
-                  <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-                    {scan.ip_address || '-'}
                   </td>
                 </tr>
               ))}
@@ -390,7 +472,9 @@ function ProfilingProgramManager() {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
   const [selectedProgram, setSelectedProgram] = useState(null);
+  const [selectedProgramForReport, setSelectedProgramForReport] = useState(null);
 
   useEffect(() => {
     loadPrograms();
@@ -438,6 +522,16 @@ function ProfilingProgramManager() {
     setShowDetailsModal(true);
   };
 
+  const handleViewReport = (program) => {
+    setSelectedProgramForReport(program);
+    setShowReportModal(true);
+  };
+
+  const handleCloseReportModal = () => {
+    setShowReportModal(false);
+    setSelectedProgramForReport(null);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -451,14 +545,12 @@ function ProfilingProgramManager() {
 
   return (
     <div className="p-6">
+      {/* Header and Action Bar */}
       <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className={`text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-            Profiling Programs
-          </h1>
-          <p className={`mt-2 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+        <div className="flex-1">
+          <h2 className="text-2xl font-semibold text-white" style={{ color: '#ffffff' }}>
             Multi-vector security awareness testing programs
-          </p>
+          </h2>
         </div>
         <button
           onClick={handleCreateProgram}
@@ -467,6 +559,13 @@ function ProfilingProgramManager() {
           <span className="text-xl">+</span>
           Create Program
         </button>
+      </div>
+      
+      {/* Title Section */}
+      <div className="mb-6">
+        <h1 className={`text-3xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+          Profiling Programs
+        </h1>
       </div>
 
       {programs.length === 0 ? (
@@ -492,6 +591,7 @@ function ProfilingProgramManager() {
               isDarkMode={isDarkMode}
               onRefresh={loadPrograms}
               onViewDetails={handleViewDetails}
+              onViewReport={handleViewReport}
             />
           ))}
         </div>
@@ -512,12 +612,529 @@ function ProfilingProgramManager() {
           isDarkMode={isDarkMode}
         />
       )}
+
+      {showReportModal && selectedProgramForReport && (
+        <ProgramReportModal
+          program={selectedProgramForReport}
+          onClose={handleCloseReportModal}
+          isDarkMode={isDarkMode}
+        />
+      )}
     </div>
   );
 }
 
+// Program Report Modal Component
+const ProgramReportModal = ({ program, onClose, isDarkMode }) => {
+  const [loading, setLoading] = useState(true);
+  const [report, setReport] = useState(null);
+  const [error, setError] = useState(null);
+  const [activeSection, setActiveSection] = useState('overview');
+
+  useEffect(() => {
+    loadReport();
+  }, [program.id]);
+
+  const loadReport = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await getProgramReport(program.id);
+      setReport(response.data);
+    } catch (error) {
+      console.error('Error loading program report:', error);
+      setError(error.response?.data?.error || 'Failed to load program report');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExportPDF = () => {
+    const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+    const url = `${API_BASE_URL}/api/programs/${program.id}/report/export?format=pdf`;
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `program-report-${program.id}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const getRiskLevelColor = (level) => {
+    const colors = {
+      critical: isDarkMode ? 'bg-red-900/30 text-red-400 border-red-900/50' : 'bg-red-100 text-red-700 border-red-200',
+      high: isDarkMode ? 'bg-orange-900/30 text-orange-400 border-orange-900/50' : 'bg-orange-100 text-orange-700 border-orange-200',
+      medium: isDarkMode ? 'bg-yellow-900/30 text-yellow-400 border-yellow-900/50' : 'bg-yellow-100 text-yellow-700 border-yellow-200',
+      low: isDarkMode ? 'bg-green-900/30 text-green-400 border-green-900/50' : 'bg-green-100 text-green-700 border-green-200',
+      positive: isDarkMode ? 'bg-blue-900/30 text-blue-400 border-blue-900/50' : 'bg-blue-100 text-blue-700 border-blue-200'
+    };
+    return colors[level] || colors.medium;
+  };
+
+  const getAwarenessColor = (level) => {
+    const colors = {
+      'Excellent': isDarkMode ? 'bg-green-900/30 text-green-400' : 'bg-green-100 text-green-700',
+      'Good': isDarkMode ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-100 text-blue-700',
+      'Fair': isDarkMode ? 'bg-yellow-900/30 text-yellow-400' : 'bg-yellow-100 text-yellow-700',
+      'Poor': isDarkMode ? 'bg-orange-900/30 text-orange-400' : 'bg-orange-100 text-orange-700',
+      'Critical': isDarkMode ? 'bg-red-900/30 text-red-400' : 'bg-red-100 text-red-700'
+    };
+    return colors[level] || colors.Fair;
+  };
+
+  const bgPrimary = isDarkMode ? 'bg-slate-900' : 'bg-slate-50';
+  const bgCard = isDarkMode ? 'bg-slate-800' : 'bg-white';
+  const borderColor = isDarkMode ? 'border-slate-700' : 'border-slate-200';
+  const textPrimary = isDarkMode ? 'text-slate-50' : 'text-slate-900';
+  const textSecondary = isDarkMode ? 'text-slate-400' : 'text-slate-600';
+
+  const sections = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'awareness', label: 'Awareness Summary' },
+    { id: 'campaigns', label: 'Campaign Breakdown' },
+    { id: 'employees', label: 'Employee Results' },
+    { id: 'departments', label: 'Department Breakdown' },
+    { id: 'gaps', label: 'Security Gaps' }
+  ];
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+      <div className={`${bgCard} rounded-xl shadow-2xl max-w-7xl w-full max-h-[90vh] overflow-y-auto`}>
+        {/* Header */}
+        <div className={`sticky top-0 ${bgCard} border-b ${borderColor} p-6 z-10`}>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className={`text-2xl font-semibold ${textPrimary}`}>Program Awareness Report</h2>
+              <p className={`text-sm mt-1 ${textSecondary}`}>{program.name}</p>
+            </div>
+            <div className="flex gap-2">
+              {!loading && !error && (
+                <button
+                  onClick={handleExportPDF}
+                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium text-sm transition flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  Export PDF
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                className={`p-2 rounded-lg transition ${isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-100'}`}
+              >
+                <svg className={`w-6 h-6 ${textPrimary}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center p-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <div className="p-8 text-center">
+            <svg className={`w-16 h-16 mx-auto mb-4 ${textSecondary}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <h3 className={`text-xl font-semibold mb-2 ${textPrimary}`}>Error Loading Report</h3>
+            <p className={`mb-6 ${textSecondary}`}>{error}</p>
+            <button
+              onClick={loadReport}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition"
+            >
+              Try Again
+            </button>
+          </div>
+        )}
+
+        {/* Report Content */}
+        {!loading && !error && report && (
+          <>
+            {/* Section Navigation */}
+            <div className={`sticky top-[89px] ${bgCard} border-b ${borderColor} p-4 z-10`}>
+              <div className="flex gap-2 overflow-x-auto">
+                {sections.map(section => (
+                  <button
+                    key={section.id}
+                    onClick={() => setActiveSection(section.id)}
+                    className={`px-4 py-2 rounded-lg font-medium text-sm whitespace-nowrap transition ${
+                      activeSection === section.id
+                        ? 'bg-blue-600 text-white'
+                        : isDarkMode
+                          ? 'text-slate-400 hover:text-white hover:bg-slate-700'
+                          : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    {section.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Content Sections */}
+            <div className="p-6 space-y-6">
+              {/* 1. Overview */}
+              {activeSection === 'overview' && report.overview && (
+                <div className={`${bgCard} border ${borderColor} rounded-xl p-6`}>
+                  <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>Program Overview</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                      <p className={`text-sm ${textSecondary} mb-1`}>Program Name</p>
+                      <p className={`font-medium ${textPrimary}`}>{report.overview.program_name}</p>
+                    </div>
+                    <div>
+                      <p className={`text-sm ${textSecondary} mb-1`}>Total Employees</p>
+                      <p className={`font-medium ${textPrimary}`}>{report.overview.total_employees || 0}</p>
+                    </div>
+                    <div>
+                      <p className={`text-sm ${textSecondary} mb-1`}>Total Campaigns</p>
+                      <p className={`font-medium ${textPrimary}`}>{report.overview.total_campaigns}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 2. Awareness Summary */}
+              {activeSection === 'awareness' && report.awareness_summary && (
+                <div>
+                  <div className={`${bgCard} border ${borderColor} rounded-xl p-6 mb-6`}>
+                    <div className="text-center">
+                      <h3 className={`text-sm font-medium mb-2 ${textSecondary}`}>Overall Awareness Score</h3>
+                      <div className="flex items-center justify-center gap-4 mb-4">
+                        <div className={`text-6xl font-bold ${textPrimary}`}>{report.awareness_summary.awareness_score}</div>
+                        <div className="text-left">
+                          <span className={`px-3 py-1 rounded-lg text-sm font-semibold ${getAwarenessColor(report.awareness_summary.awareness_level)}`}>
+                            {report.awareness_summary.awareness_level}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={`${bgCard} border ${borderColor} rounded-xl p-6`}>
+                    <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>Employee Behavior Breakdown</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className={`p-4 rounded-lg border ${isDarkMode ? 'bg-green-900/10 border-green-900/30' : 'bg-green-50 border-green-200'}`}>
+                        <p className={`text-sm ${textSecondary} mb-1`}>No Interaction</p>
+                        <p className={`text-2xl font-bold ${isDarkMode ? 'text-green-400' : 'text-green-700'}`}>
+                          {report.awareness_summary.no_interaction_percent}%
+                        </p>
+                        <p className={`text-xs ${textSecondary}`}>{report.awareness_summary.no_interaction_count} employees</p>
+                      </div>
+                      <div className={`p-4 rounded-lg border ${isDarkMode ? 'bg-orange-900/10 border-orange-900/30' : 'bg-orange-50 border-orange-200'}`}>
+                        <p className={`text-sm ${textSecondary} mb-1`}>Clicked/Interacted</p>
+                        <p className={`text-2xl font-bold ${isDarkMode ? 'text-orange-400' : 'text-orange-700'}`}>
+                          {report.awareness_summary.clicked_percent}%
+                        </p>
+                        <p className={`text-xs ${textSecondary}`}>{report.awareness_summary.clicked_count} employees</p>
+                      </div>
+                      <div className={`p-4 rounded-lg border ${isDarkMode ? 'bg-red-900/10 border-red-900/30' : 'bg-red-50 border-red-200'}`}>
+                        <p className={`text-sm ${textSecondary} mb-1`}>Submitted Credentials</p>
+                        <p className={`text-2xl font-bold ${isDarkMode ? 'text-red-400' : 'text-red-700'}`}>
+                          {report.awareness_summary.submitted_credentials_percent}%
+                        </p>
+                        <p className={`text-xs ${textSecondary}`}>{report.awareness_summary.submitted_credentials_count} employees</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 3. Campaign Breakdown */}
+              {activeSection === 'campaigns' && report.campaign_breakdown && (
+                <div className={`${bgCard} border ${borderColor} rounded-xl p-6`}>
+                  <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>Campaign Breakdown by Vector</h3>
+                  {console.log('[REPORT DEBUG] Campaign Breakdown:', report.campaign_breakdown)}
+                  {console.log('[REPORT DEBUG] QR Campaigns:', report.campaign_breakdown.qr_campaigns)}
+                  <div className="space-y-6">
+                    {/* Email Campaigns */}
+                    {report.campaign_breakdown.email_campaigns && report.campaign_breakdown.email_campaigns.length > 0 && (
+                      <div>
+                        <h4 className={`font-semibold mb-3 ${textPrimary} flex items-center gap-2`}>
+                          <span>📧</span> Email Campaigns ({report.campaign_breakdown.email_campaigns.length})
+                        </h4>
+                        <div className="space-y-2">
+                          {report.campaign_breakdown.email_campaigns.map((camp, idx) => (
+                            <div key={idx} className={`p-4 rounded-lg border ${borderColor}`}>
+                              <div className="flex justify-between items-start mb-3">
+                                <div className={`font-medium ${textPrimary}`}>{camp.name}</div>
+                                <span className={`text-sm ${textSecondary}`}>{camp.click_rate}% click rate</span>
+                              </div>
+                              <div className="flex items-center gap-6 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <span className={textSecondary}>Targets:</span>
+                                  <span className={`font-medium ${textPrimary}`}>{camp.total_targets}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className={textSecondary}>Opened:</span>
+                                  <span className={`font-medium ${textPrimary}`}>{camp.opened_count}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className={textSecondary}>Clicked:</span>
+                                  <span className={`font-medium ${textPrimary}`}>{camp.clicked_count}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* SMS Campaigns */}
+                    {report.campaign_breakdown.sms_campaigns && report.campaign_breakdown.sms_campaigns.length > 0 && (
+                      <div>
+                        <h4 className={`font-semibold mb-3 ${textPrimary} flex items-center gap-2`}>
+                          <span>💬</span> SMS Campaigns ({report.campaign_breakdown.sms_campaigns.length})
+                        </h4>
+                        <div className="space-y-2">
+                          {report.campaign_breakdown.sms_campaigns.map((camp, idx) => (
+                            <div key={idx} className={`p-4 rounded-lg border ${borderColor}`}>
+                              <div className="flex justify-between items-start mb-3">
+                                <div className={`font-medium ${textPrimary}`}>{camp.name}</div>
+                                <span className={`text-sm ${textSecondary}`}>{camp.click_rate}% click rate</span>
+                              </div>
+                              <div className="flex items-center gap-6 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <span className={textSecondary}>Targets:</span>
+                                  <span className={`font-medium ${textPrimary}`}>{camp.total_targets}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className={textSecondary}>Clicked:</span>
+                                  <span className={`font-medium ${textPrimary}`}>{camp.clicked_count}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className={textSecondary}>Not Clicked:</span>
+                                  <span className={`font-medium ${textPrimary}`}>{camp.total_targets - camp.clicked_count}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* QR Campaigns */}
+                    {report.campaign_breakdown.qr_campaigns && report.campaign_breakdown.qr_campaigns.length > 0 && (
+                      <div>
+                        <h4 className={`font-semibold mb-3 ${textPrimary} flex items-center gap-2`}>
+                          <span>📱</span> QR Code Campaigns ({report.campaign_breakdown.qr_campaigns.length})
+                        </h4>
+                        <div className="space-y-2">
+                          {report.campaign_breakdown.qr_campaigns.map((camp, idx) => (
+                            <div key={idx} className={`p-4 rounded-lg border ${borderColor}`}>
+                              <div className="flex justify-between items-start mb-3">
+                                <div className={`font-medium ${textPrimary}`}>{camp.campaign_name}</div>
+                                <span className={`text-sm ${textSecondary}`}>{camp.clicked_rate}% scan rate</span>
+                              </div>
+                              <div className="flex items-center gap-6 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <span className={textSecondary}>Total Targets:</span>
+                                  <span className={`font-medium ${textPrimary}`}>{camp.total_targets}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className={textSecondary}>Scanned:</span>
+                                  <span className={`font-medium ${textPrimary}`}>{camp.clicked}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className={textSecondary}>Not Scanned:</span>
+                                  <span className={`font-medium ${textPrimary}`}>{camp.total_targets - camp.clicked}</span>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 4. Employee Results */}
+              {activeSection === 'employees' && report.employee_results && (
+                <div className={`${bgCard} border ${borderColor} rounded-xl overflow-hidden`}>
+                  <div className="p-6">
+                    <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>Individual Employee Results</h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className={isDarkMode ? 'bg-slate-700/50' : 'bg-slate-50'}>
+                        <tr>
+                          <th className={`px-6 py-3 text-left text-xs font-semibold ${textSecondary} uppercase tracking-wider`}>Employee</th>
+                          <th className={`px-6 py-3 text-left text-xs font-semibold ${textSecondary} uppercase tracking-wider`}>Department</th>
+                          <th className={`px-6 py-3 text-left text-xs font-semibold ${textSecondary} uppercase tracking-wider`}>Failed Vectors</th>
+                          <th className={`px-6 py-3 text-left text-xs font-semibold ${textSecondary} uppercase tracking-wider`}>Risk Level</th>
+                          <th className={`px-6 py-3 text-left text-xs font-semibold ${textSecondary} uppercase tracking-wider`}>Training</th>
+                        </tr>
+                      </thead>
+                      <tbody className={`divide-y ${borderColor}`}>
+                        {report.employee_results.map((employee, index) => (
+                          <tr key={index} className={isDarkMode ? 'hover:bg-slate-700/30' : 'hover:bg-slate-50'}>
+                            <td className="px-6 py-4">
+                              <div className={`font-medium ${textPrimary}`}>{employee.name}</div>
+                              <div className={`text-sm ${textSecondary}`}>
+                                {employee.email || employee.phone || 'No contact info'}
+                              </div>
+                            </td>
+                            <td className={`px-6 py-4 ${textSecondary}`}>{employee.department || 'N/A'}</td>
+                            <td className="px-6 py-4">
+                              <div className="flex flex-wrap gap-1">
+                                {employee.failed_vectors && employee.failed_vectors.length > 0 ? (
+                                  employee.failed_vectors.map((vector, idx) => {
+                                    const getVectorIcon = (v) => {
+                                      if (v === 'Email') return '📧';
+                                      if (v === 'SMS') return '💬';
+                                      if (v === 'QR') return '📱';
+                                      return '';
+                                    };
+                                    const getVectorColor = (v) => {
+                                      if (v === 'Email') return isDarkMode ? 'bg-blue-900/30 text-blue-300 border border-blue-700' : 'bg-blue-100 text-blue-700 border border-blue-300';
+                                      if (v === 'SMS') return isDarkMode ? 'bg-purple-900/30 text-purple-300 border border-purple-700' : 'bg-purple-100 text-purple-700 border border-purple-300';
+                                      if (v === 'QR') return isDarkMode ? 'bg-orange-900/30 text-orange-300 border border-orange-700' : 'bg-orange-100 text-orange-700 border border-orange-300';
+                                      return isDarkMode ? 'bg-slate-700 text-slate-300' : 'bg-slate-200 text-slate-700';
+                                    };
+                                    return (
+                                      <span key={idx} className={`px-2 py-1 rounded text-xs font-medium ${getVectorColor(vector)}`}>
+                                        {getVectorIcon(vector)} {vector}
+                                      </span>
+                                    );
+                                  })
+                                ) : (
+                                  <span className={`text-xs ${textSecondary}`}>None</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`px-2 py-1 rounded-md text-xs font-semibold ${getRiskLevelColor(employee.risk_level)}`}>
+                                {employee.risk_level.toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              {employee.training_completed ? (
+                                <span className={`text-xs font-medium ${isDarkMode ? 'text-green-400' : 'text-green-600'}`}>✓ Completed</span>
+                              ) : employee.training_recommended ? (
+                                <span className={`text-xs ${isDarkMode ? 'text-orange-400' : 'text-orange-600'}`}>Recommended</span>
+                              ) : (
+                                <span className={`text-xs ${textSecondary}`}>-</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* 5. Department Breakdown */}
+              {activeSection === 'departments' && report.department_breakdown && (
+                <div className={`${bgCard} border ${borderColor} rounded-xl p-6`}>
+                  <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>Department Risk Breakdown</h3>
+                  <div className="space-y-4">
+                    {report.department_breakdown.map((dept, index) => (
+                      <div key={index} className={`p-4 rounded-lg border ${borderColor}`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className={`font-semibold ${textPrimary}`}>{dept.department}</h4>
+                          <span className={`px-3 py-1 rounded-lg text-xs font-semibold ${getRiskLevelColor(dept.risk_level)}`}>
+                            {dept.risk_level.toUpperCase()} RISK
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                          <div>
+                            <p className={`text-xs ${textSecondary}`}>Employees</p>
+                            <p className={`text-lg font-semibold ${textPrimary}`}>{dept.total_employees}</p>
+                          </div>
+                          <div>
+                            <p className={`text-xs ${textSecondary}`}>Failed</p>
+                            <p className={`text-lg font-semibold ${textPrimary}`}>{dept.failed_count}</p>
+                          </div>
+                          <div>
+                            <p className={`text-xs ${textSecondary}`}>Failure Rate</p>
+                            <p className={`text-lg font-semibold ${textPrimary}`}>{dept.failure_rate}%</p>
+                          </div>
+                          <div>
+                            <p className={`text-xs ${textSecondary}`}>Need Training</p>
+                            <p className={`text-lg font-semibold ${textPrimary}`}>{dept.training_needed}</p>
+                          </div>
+                        </div>
+                        <div className="w-full bg-slate-600/20 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full ${
+                              dept.risk_level === 'critical' ? 'bg-red-500' :
+                              dept.risk_level === 'high' ? 'bg-orange-500' :
+                              dept.risk_level === 'medium' ? 'bg-yellow-500' :
+                              'bg-green-500'
+                            }`}
+                            style={{ width: `${dept.failure_rate}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 6. Security Gaps */}
+              {activeSection === 'gaps' && report.security_gaps && (
+                <div>
+                  <div className={`${bgCard} border ${borderColor} rounded-xl p-6 mb-6`}>
+                    <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>Executive Summary</h3>
+                    <div className={`p-4 rounded-lg ${isDarkMode ? 'bg-slate-700/50' : 'bg-slate-50'}`}>
+                      <p className={textPrimary}>{report.security_gaps.summary}</p>
+                    </div>
+                  </div>
+
+                  <div className={`${bgCard} border ${borderColor} rounded-xl p-6`}>
+                    <h3 className={`text-lg font-semibold mb-4 ${textPrimary}`}>Identified Security Gaps</h3>
+                    <div className="space-y-4">
+                      {report.security_gaps.gaps.map((gap, index) => (
+                        <div key={index} className={`p-4 rounded-lg border ${getRiskLevelColor(gap.severity)}`}>
+                          <div className="flex items-start gap-3">
+                            <div className="flex-shrink-0">
+                              {(gap.severity === 'critical' || gap.severity === 'high') && (
+                                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                              {gap.severity === 'positive' && (
+                                <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-xs font-semibold uppercase">{gap.category}</span>
+                                <span className="text-xs opacity-75">•</span>
+                                <span className="text-xs font-semibold uppercase">{gap.severity}</span>
+                              </div>
+                              <p className="font-medium mb-2">{gap.finding}</p>
+                              <p className="text-sm opacity-90">{gap.recommendation}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // Program Card Component
-const ProgramCard = ({ program, isDarkMode, onRefresh, onViewDetails, onDelete }) => {
+const ProgramCard = ({ program, isDarkMode, onRefresh, onViewDetails, onDelete, onViewReport }) => {
   const getStatusColor = (status) => {
     const colors = {
       draft: 'bg-gray-500',
@@ -548,13 +1165,10 @@ const ProgramCard = ({ program, isDarkMode, onRefresh, onViewDetails, onDelete }
     <div className={`rounded-lg p-6 border ${
       isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
     }`}>
-      <div className="flex justify-between items-start mb-4">
-        <h3 className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+      <div className="mb-4">
+        <h3 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
           {program.name}
         </h3>
-        <span className={`px-2 py-1 rounded text-xs text-white ${getStatusColor(program.status)}`}>
-          {program.status}
-        </span>
       </div>
       <p className={`text-sm mb-4 ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
         {program.description}
@@ -574,10 +1188,10 @@ const ProgramCard = ({ program, isDarkMode, onRefresh, onViewDetails, onDelete }
           );
         })}
       </div>
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2">
         <button
           onClick={() => onViewDetails(program)}
-          className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+          className={`w-full px-4 py-2 rounded-lg font-medium transition-colors ${
             isDarkMode
               ? 'bg-blue-600 hover:bg-blue-700 text-white'
               : 'bg-blue-500 hover:bg-blue-600 text-white'
@@ -586,8 +1200,19 @@ const ProgramCard = ({ program, isDarkMode, onRefresh, onViewDetails, onDelete }
           View Details
         </button>
         <button
+          onClick={() => onViewReport && onViewReport(program)}
+          className={`w-full px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
+            isDarkMode
+              ? 'bg-green-600 hover:bg-green-700 text-white'
+              : 'bg-green-500 hover:bg-green-600 text-white'
+          }`}
+        >
+          <span>📊</span>
+          Awareness Report
+        </button>
+        <button
           onClick={handleDelete}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+          className={`w-full px-4 py-2 rounded-lg font-medium transition-colors ${
             isDarkMode
               ? 'bg-red-600 hover:bg-red-700 text-white'
               : 'bg-red-500 hover:bg-red-600 text-white'
@@ -1084,7 +1709,7 @@ const EmailVectorConfig = ({ config, onChange, isDarkMode }) => {
         {uploadMethod === 'manual' && (
           <div>
             <textarea
-              placeholder="Enter email addresses, one per line:&#10;user1@example.com&#10;user2@example.com&#10;user3@example.com"
+              placeholder="Enter name, email, and department, one per line (format: Name, email@example.com, Department):&#10;John Doe, john@example.com, IT&#10;Jane Smith, jane@example.com, HR&#10;Bob Wilson, bob@example.com, Finance"
               value={config?.manual_emails || ''}
               onChange={(e) => {
                 onChange({
@@ -1098,7 +1723,7 @@ const EmailVectorConfig = ({ config, onChange, isDarkMode }) => {
               }`}
             />
             <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              Enter email addresses, one per line
+              Enter name, email, and department, one per line (format: Name, email@example.com, Department)
             </p>
           </div>
         )}
@@ -1174,6 +1799,7 @@ const EmailVectorConfig = ({ config, onChange, isDarkMode }) => {
 const QRVectorConfig = ({ config, onChange, isDarkMode }) => {
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
+  const [qrCampaigns, setQrCampaigns] = useState([]);
   const [uploadMethod, setUploadMethod] = useState('employees');
   const [selectedEmployees, setSelectedEmployees] = useState([]);
   const [employeeFilter, setEmployeeFilter] = useState({ department: '', search: '' });
@@ -1184,25 +1810,28 @@ const QRVectorConfig = ({ config, onChange, isDarkMode }) => {
 
   const loadData = async () => {
     try {
-      const [employeesRes, deptsRes] = await Promise.all([
+      const [employeesRes, deptsRes, qrRes] = await Promise.all([
         getEmployees(),
-        getEmployeeDepartments()
+        getEmployeeDepartments(),
+        getQRCampaigns()
       ]);
       setEmployees(employeesRes.data.employees || employeesRes.data || []);
       setDepartments(deptsRes.data.departments || deptsRes.data || []);
+      setQrCampaigns(qrRes.data || []);
     } catch (error) {
       console.error('Error loading QR config data:', error);
     }
   };
 
   useEffect(() => {
-    if (selectedEmployees.length > 0) {
+    if (uploadMethod === 'employees' && selectedEmployees.length > 0) {
       onChange({
         ...config,
+        target_selection: 'employees',
         target_employees: selectedEmployees.map(e => e.id)
       });
     }
-  }, [selectedEmployees]);
+  }, [selectedEmployees, uploadMethod]);
 
   const toggleEmployee = (employee) => {
     setSelectedEmployees(prev => {
@@ -1245,46 +1874,29 @@ const QRVectorConfig = ({ config, onChange, isDarkMode }) => {
 
   return (
     <div className="space-y-4">
+      {/* Select Existing QR Poster */}
       <div>
-        <label className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-          Campaign Description
+        <label className={`block text-sm font-medium mb-2 ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+          Select QR Code Poster *
         </label>
-        <input
-          type="text"
-          value={config?.description || ''}
-          onChange={(e) => onChange({ ...config, description: e.target.value })}
+        <select
+          value={config?.qr_campaign_id || ''}
+          onChange={(e) => onChange({ ...config, qr_campaign_id: e.target.value })}
           className={`w-full px-3 py-2 rounded-lg border ${
             isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
           }`}
-          placeholder="Scan for free gift card"
-        />
-      </div>
-
-      <div>
-        <label className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-          Placement Location
-        </label>
-        <input
-          type="text"
-          value={config?.placement || ''}
-          onChange={(e) => onChange({ ...config, placement: e.target.value })}
-          className={`w-full px-3 py-2 rounded-lg border ${
-            isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
-          }`}
-          placeholder="Office lobby, breakroom, etc."
-        />
-      </div>
-
-      <div>
-        <label className={`block text-sm font-medium mb-1 ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-          QR Code Color
-        </label>
-        <input
-          type="color"
-          value={config?.color || '#000000'}
-          onChange={(e) => onChange({ ...config, color: e.target.value })}
-          className="w-full h-10 rounded-lg border cursor-pointer"
-        />
+          required
+        >
+          <option value="">-- Select a QR Code Poster --</option>
+          {qrCampaigns.map((qr) => (
+            <option key={qr.id} value={qr.id}>
+              {qr.name} {qr.description ? `- ${qr.description}` : ''}
+            </option>
+          ))}
+        </select>
+        <p className={`mt-1 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+          Choose from posters created in Campaigns → QR Phishing menu
+        </p>
       </div>
 
       {/* Target Employees - Same structure as Email */}
@@ -1408,6 +2020,80 @@ const QRVectorConfig = ({ config, onChange, isDarkMode }) => {
               </div>
             )}
           </>
+        )}
+
+        {uploadMethod === 'manual' && (
+          <div>
+            <textarea
+              placeholder="Enter name, email, and department, one per line (format: Name, email@example.com, Department):&#10;John Doe, john@example.com, IT&#10;Jane Smith, jane@example.com, HR&#10;Bob Wilson, bob@example.com, Finance"
+              value={config?.manual_emails || ''}
+              onChange={(e) => {
+                console.log('[QR MANUAL] Text changed:', e.target.value);
+                onChange({
+                  ...config,
+                  manual_emails: e.target.value,
+                  target_selection: 'manual'
+                });
+              }}
+              rows={6}
+              className={`w-full px-3 py-2 rounded-lg border font-mono text-sm ${
+                isDarkMode ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'
+              }`}
+            />
+            <p className={`mt-2 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              Enter one employee per line in the format: Name, email@example.com, Department
+            </p>
+          </div>
+        )}
+
+        {uploadMethod === 'csv' && (
+          <div>
+            <div className={`border-2 border-dashed rounded-lg p-6 text-center ${
+              isDarkMode ? 'border-gray-600' : 'border-gray-300'
+            }`}>
+              <input
+                type="file"
+                accept=".csv,.txt"
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                      const csvContent = event.target.result;
+                      onChange({
+                        ...config,
+                        target_selection: 'csv',
+                        csv_data: csvContent,
+                        csv_filename: file.name
+                      });
+                    };
+                    reader.readAsText(file);
+                  }
+                }}
+                className="hidden"
+                id="qr-csv-upload"
+              />
+              <label
+                htmlFor="qr-csv-upload"
+                className={`cursor-pointer inline-flex items-center px-4 py-2 rounded-lg ${
+                  isDarkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-200 hover:bg-gray-300'
+                }`}
+              >
+                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                Choose CSV File
+              </label>
+              {config?.csv_filename && (
+                <p className={`mt-2 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                  Selected: {config.csv_filename}
+                </p>
+              )}
+            </div>
+            <p className={`mt-2 text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+              CSV should have columns: name, email, department
+            </p>
+          </div>
         )}
       </div>
     </div>
@@ -1787,7 +2473,7 @@ const SMSVectorConfig = ({ config, onChange, isDarkMode }) => {
         {uploadMethod === 'manual' && (
           <div>
             <textarea
-              placeholder="Enter phone numbers, one per line:&#10;+994501234567&#10;+994551234568&#10;+994701234569"
+              placeholder="Enter name, phone number, and department, one per line (format: Name, +994501234567, Department):&#10;John Doe, +994501234567, IT&#10;Jane Smith, +994551234568, HR&#10;Bob Wilson, +994701234569, Finance"
               value={safeConfig.manual_numbers || ''}
               onChange={(e) => {
                 const numbers = e.target.value;
@@ -1802,7 +2488,7 @@ const SMSVectorConfig = ({ config, onChange, isDarkMode }) => {
               }`}
             />
             <p className={`text-xs mt-1 ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-              Enter phone numbers in international format (+994...), one per line
+              Enter name, phone number, and department in international format, one per line (format: Name, +994501234567, Department)
             </p>
           </div>
         )}

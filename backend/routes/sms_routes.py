@@ -397,8 +397,32 @@ def track_sms_click(tracking_token):
             from flask import render_template_string
             return render_template_string(html, tracking_token=new_token)
 
-    # Default: show SMS training page
-    return redirect('/api/sms/training')
+    # Default: show SMS training page with employee context
+    employee_name = target.name or target.phone_number or 'Employee'
+    employee_phone = target.phone_number or 'Unknown'
+
+    # Get employee department if available
+    employee = Employee.query.filter_by(email=target.email).first() if target.email else None
+    department = employee.department if employee else (target.department or 'Unknown')
+
+    # Get SMS campaign details
+    from_number = campaign.sender_id or 'Unknown Number'
+    sms_body = campaign.message_template or 'This is a simulated phishing SMS.'
+
+    # Serve training page with context
+    from flask import render_template_string
+    return render_template_string(
+        SMS_TRAINING_PAGE,
+        employee_name=employee_name,
+        employee_phone=employee_phone,
+        employee_id=target.id,
+        department=department,
+        from_number=from_number,
+        sms_body=sms_body[:200] + '...' if len(sms_body) > 200 else sms_body,
+        clicked_url=request.url,
+        program_id=campaign.program_id or '',
+        campaign_id=campaign.id
+    )
 
 
 @bp.route('/training')
@@ -604,122 +628,386 @@ def get_sms_templates():
 # TRAINING PAGE
 # ============================================
 
-SMS_TRAINING_PAGE = '''
-<!DOCTYPE html>
-<html>
+SMS_TRAINING_PAGE = '''<!doctype html>
+<html lang="en">
 <head>
-    <title>SMS Phishing Awareness</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #1a1a2e;
-            color: white;
-            min-height: 100vh;
-        }
-        .header {
-            background: linear-gradient(135deg, #9b59b6, #8e44ad);
-            padding: 60px 20px;
-            text-align: center;
-        }
-        .header h1 {
-            font-size: 1.8em;
-            margin-bottom: 10px;
-        }
-        .header p {
-            opacity: 0.9;
-        }
-        .content {
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 30px 20px;
-        }
-        .card {
-            background: #16213e;
-            border-radius: 12px;
-            padding: 25px;
-            margin-bottom: 20px;
-        }
-        .card h2 {
-            color: #9b59b6;
-            margin-bottom: 15px;
-            font-size: 1.2em;
-        }
-        .card p, .card li {
-            color: #ccc;
-            line-height: 1.6;
-            margin-bottom: 10px;
-        }
-        .card ul {
-            margin-left: 20px;
-        }
-        .phone-example {
-            background: #0f0f23;
-            border-radius: 20px;
-            padding: 20px;
-            margin: 20px 0;
-            border: 2px solid #333;
-        }
-        .sms-bubble {
-            background: #1a73e8;
-            color: white;
-            padding: 12px 16px;
-            border-radius: 18px 18px 4px 18px;
-            max-width: 80%;
-            margin-bottom: 10px;
-            font-size: 14px;
-        }
-        .red-flag {
-            color: #e74c3c;
-            font-weight: bold;
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Smishing Training</title>
+  <style>
+    :root{
+      --bg:#0b1220;
+      --panel:#0f1b33;
+      --panel2:#0d1730;
+      --text:#e6edf6;
+      --muted:#a9b7d0;
+      --accent:#a855f7;
+      --accent2:#3b82f6;
+      --danger:#ef4444;
+      --ok:#22c55e;
+      --border:rgba(255,255,255,.08);
+      --shadow:0 10px 30px rgba(0,0,0,.35);
+      --radius:18px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(1200px 600px at 50% -200px, rgba(168,85,247,.35), transparent),
+                  radial-gradient(1000px 500px at 80% 20%, rgba(59,130,246,.25), transparent),
+                  var(--bg);
+      color:var(--text);
+      line-height:1.45;
+    }
+
+    /* ✅ FIX #1: Responsive header so "SIMULATION" never squishes into the title */
+    header{
+      padding:18px 16px 16px;
+      background: linear-gradient(180deg, rgba(168,85,247,.55), rgba(168,85,247,.15));
+      border-bottom:1px solid var(--border);
+      text-align:left; /* better on mobile */
+    }
+    .hero{
+      max-width:760px;
+      margin:0 auto;
+      display:flex;
+      align-items:center;
+      gap:14px;
+      flex-wrap:wrap; /* key: allows wrapping instead of overlapping */
+    }
+    .heroBadge{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      padding:10px 16px;
+      border-radius:999px;
+      font-weight:900;
+      letter-spacing:.8px;
+      text-transform:uppercase;
+      background: rgba(239,68,68,.18);
+      border: 1px solid rgba(239,68,68,.35);
+      color: rgba(255,230,230,.95);
+      white-space:nowrap;
+      flex:0 0 auto;
+    }
+    .heroText{
+      min-width: 220px;
+      flex: 1 1 240px; /* gives space, wraps below if needed */
+    }
+    header h1{
+      margin:0;
+      font-size:26px;
+      letter-spacing:.2px;
+      font-weight:900;
+      line-height:1.15;
+    }
+    header p{
+      margin:8px 0 0;
+      color:rgba(255,255,255,.9);
+      font-size:14px;
+    }
+
+    .wrap{
+      max-width:760px;
+      margin:0 auto;
+      padding:18px;
+    }
+    .card{
+      background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border:1px solid var(--border);
+      box-shadow:var(--shadow);
+      border-radius:var(--radius);
+      padding:18px;
+      margin:14px 0;
+    }
+    .card h2{
+      margin:0 0 10px;
+      font-size:18px;
+      font-weight:800;
+      color: rgba(168,85,247,.95);
+    }
+    .card p{margin:10px 0;color:var(--muted)}
+    ul{margin:10px 0 0 18px;color:var(--muted)}
+    li{margin:8px 0}
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding:8px 12px;
+      border-radius:999px;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.03);
+      color:rgba(255,255,255,.92);
+      font-size:13px;
+      font-weight:600;
+    }
+    .pill .dot{
+      width:10px;height:10px;border-radius:50%;
+      background:var(--accent2);
+      box-shadow:0 0 0 4px rgba(59,130,246,.15);
+    }
+    .example{
+      background: radial-gradient(500px 200px at 30% 0%, rgba(59,130,246,.25), transparent), var(--panel);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:16px;
+    }
+
+    /* ✅ FIX #2: bubble + long link wrapping (no overflow) */
+    .smsBubble{
+      margin-top:10px;
+      background: #2563eb;
+      color:white;
+      padding:14px 14px;
+      border-radius:18px;
+      width:100%;          /* bubble can be full width on mobile */
+      max-width:100%;
+      box-shadow: 0 8px 22px rgba(37,99,235,.35);
+      font-weight:600;
+      overflow-wrap:anywhere;  /* breaks very long URLs */
+      word-break:break-word;   /* fallback */
+      white-space:normal;      /* allow wrapping */
+    }
+    /* If the URL is inside <a>, ensure it wraps too */
+    .smsBubble a{
+      color:#dbeafe;
+      text-decoration:underline;
+      overflow-wrap:anywhere;
+      word-break:break-word;
+    }
+
+    .label{
+      display:block;
+      font-size:12px;
+      color:rgba(255,255,255,.7);
+      margin-top:8px;
+    }
+    .flagsTitle{
+      color: #fb7185;
+      font-weight:800;
+      margin-top:14px;
+    }
+    .actions{
+      display:flex;
+      gap:12px;
+      flex-wrap:wrap;
+      margin-top:12px;
+    }
+    button{
+      appearance:none;
+      border:none;
+      cursor:pointer;
+      border-radius:14px;
+      padding:12px 14px;
+      font-weight:800;
+      font-size:14px;
+    }
+    .btnPrimary{
+      background: linear-gradient(90deg, rgba(168,85,247,1), rgba(59,130,246,1));
+      color:white;
+      box-shadow:0 10px 30px rgba(168,85,247,.25);
+      opacity:.6;
+    }
+    .btnPrimary.enabled{opacity:1}
+    .btnGhost{
+      background:rgba(255,255,255,.06);
+      border:1px solid var(--border);
+      color:rgba(255,255,255,.92);
+    }
+    .checkboxRow{
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+      margin-top:10px;
+      color:var(--muted);
+    }
+    input[type="checkbox"]{
+      margin-top:3px;
+      width:18px;height:18px;
+      accent-color: var(--accent);
+    }
+    .note{
+      font-size:12px;
+      color:rgba(255,255,255,.68);
+      margin-top:10px;
+      border-top:1px dashed var(--border);
+      padding-top:12px;
+    }
+    .success{
+      display:none;
+      margin-top:12px;
+      background:rgba(34,197,94,.12);
+      border:1px solid rgba(34,197,94,.25);
+      color:rgba(220,255,235,.95);
+      padding:12px 14px;
+      border-radius:14px;
+      font-weight:700;
+    }
+    .footer{
+      text-align:center;
+      padding:16px 0 28px;
+      color:rgba(255,255,255,.55);
+      font-size:12px;
+    }
+
+    /* Mobile tweaks */
+    @media (max-width: 420px){
+      header h1{font-size:22px}
+      .heroBadge{padding:9px 14px;font-size:13px}
+    }
+  </style>
 </head>
+
 <body>
-    <div class="header">
-        <h1>You Clicked a Smishing Link</h1>
-        <p>This was an SMS phishing simulation</p>
+  <header>
+    <div class="hero">
+      <div class="heroBadge">SIMULATION</div>
+      <div class="heroText">
+        <h1>SMS Phishing Training</h1>
+        <p>This was an <b>SMS phishing simulation</b> to help you recognize real attacks.</p>
+      </div>
     </div>
-    <div class="content">
-        <div class="card">
-            <h2>What is Smishing?</h2>
-            <p><strong>Smishing</strong> (SMS + Phishing) is when attackers send fraudulent text messages to trick you into:</p>
-            <ul>
-                <li>Clicking malicious links</li>
-                <li>Downloading malware</li>
-                <li>Revealing personal information</li>
-                <li>Making payments to scammers</li>
-            </ul>
+  </header>
+
+  <div class="wrap">
+    <div class="card">
+      <span class="pill"><span class="dot"></span> Training Module: Smishing (SMS + Phishing)</span>
+    </div>
+
+    <div class="card">
+      <h2>Why this matters</h2>
+      <p>
+        Smishing attacks can lead to account takeovers, financial loss, or malware installation.
+        One click can be enough to compromise personal data or company systems.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>What is Smishing?</h2>
+      <p>
+        <b>Smishing (SMS + Phishing)</b> is when attackers send fraudulent text messages to trick you into:
+      </p>
+      <ul>
+        <li>Clicking malicious links</li>
+        <li>Downloading malware</li>
+        <li>Revealing personal information</li>
+        <li>Making payments to scammers</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>What went wrong in your case</h2>
+      <p>Based on this simulation, these were the key warning signs:</p>
+      <ul>
+        <li><b>Urgent language</b> that pressures you to act quickly</li>
+        <li><b>Shortened or suspicious URL</b> that hides the real destination</li>
+        <li><b>Unexpected request</b> to verify an account or take immediate action</li>
+      </ul>
+      <p class="label">Tip: Always slow down. Urgency is a common manipulation technique.</p>
+    </div>
+
+    <div class="card">
+      <h2>Example Smishing Message</h2>
+      <div class="example">
+        <span class="label">Message you received (simulation):</span>
+
+        <!-- long URLs will wrap now -->
+        <div class="smsBubble">
+          ALERT: Unusual activity on your account. Verify immediately: {{clicked_url}}
         </div>
 
-        <div class="card">
-            <h2>Example Smishing Message</h2>
-            <div class="phone-example">
-                <div class="sms-bubble">
-                    ALERT: Unusual activity on your account. Verify immediately: bit.ly/x8k2m
-                </div>
-            </div>
-            <p><span class="red-flag">Red Flags:</span></p>
-            <ul>
-                <li>Urgent language ("ALERT", "immediately")</li>
-                <li>Shortened/suspicious URL</li>
-                <li>No personalization (doesn't use your name)</li>
-                <li>Requests to click a link</li>
-            </ul>
-        </div>
-
-        <div class="card">
-            <h2>How to Protect Yourself</h2>
-            <ul>
-                <li><strong>Don't click links</strong> in unexpected text messages</li>
-                <li><strong>Verify the sender</strong> by calling the organization directly</li>
-                <li><strong>Check URLs</strong> - hover or long-press to preview</li>
-                <li><strong>Report suspicious texts</strong> to your IT team</li>
-                <li><strong>Delete the message</strong> without responding</li>
-            </ul>
-        </div>
+        <div class="flagsTitle">Red Flags</div>
+        <ul>
+          <li>Urgent words like <b>"ALERT"</b> and <b>"immediately"</b></li>
+          <li>Shortened / suspicious link</li>
+          <li>No personalization (doesn't use your real name)</li>
+          <li>Asks you to click a link to "fix" something</li>
+        </ul>
+      </div>
     </div>
+
+    <div class="card">
+      <h2>How to protect yourself</h2>
+      <ul>
+        <li><b>Don't click links</b> in unexpected text messages</li>
+        <li><b>Verify the sender</b> using official channels (call the organization directly)</li>
+        <li><b>Check URLs</b> by long-pressing to preview (on mobile) before opening</li>
+        <li><b>Report suspicious messages</b> to your IT/security team</li>
+        <li><b>Delete the message</b> without responding</li>
+      </ul>
+
+      <div class="checkboxRow">
+        <input id="ack" type="checkbox" />
+        <div>
+          <div><b>I understand how to recognize smishing messages</b></div>
+          <div class="label">Checking this enables completion.</div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="completeBtn" class="btnPrimary" disabled>Mark Training as Completed</button>
+        <button class="btnGhost" onclick="window.print()">Print / Save as PDF</button>
+      </div>
+
+      <div id="success" class="success">
+        ✅ Training completed. Thank you — you may be re-tested in a future campaign to measure improvement.
+      </div>
+
+      <div class="note">
+        <b>Re-measurement:</b> You may be re-tested with a similar SMS during future awareness programs to
+        track improvement and close the gap.
+      </div>
+    </div>
+
+    <div class="footer">
+      © Security Awareness · Simulation Only
+    </div>
+  </div>
+
+  <script>
+    const ack = document.getElementById("ack");
+    const btn = document.getElementById("completeBtn");
+    const success = document.getElementById("success");
+
+    ack.addEventListener("change", () => {
+      btn.disabled = !ack.checked;
+      btn.classList.toggle("enabled", ack.checked);
+    });
+
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      btn.textContent = "Recording...";
+
+      try {
+        const response = await fetch("/api/training/complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            employeeId: "{{employee_id}}",
+            programId: "{{program_id}}",
+            campaignId: "{{campaign_id}}",
+            module: "smishing",
+            completedAt: new Date().toISOString()
+          })
+        });
+
+        if (response.ok) {
+          success.style.display = "block";
+          btn.textContent = "Completed";
+        } else {
+          const error = await response.json().catch(() => ({}));
+          alert("Failed to record completion: " + (error.error || response.statusText));
+          btn.disabled = false;
+          btn.textContent = "Mark Training as Completed";
+        }
+      } catch (e) {
+        console.error("Could not record completion:", e);
+        alert("Network error - please check your connection and try again");
+        btn.disabled = false;
+        btn.textContent = "Mark Training as Completed";
+      }
+    });
+  </script>
 </body>
 </html>
 '''

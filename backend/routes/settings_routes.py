@@ -80,6 +80,16 @@ def update_settings():
         else:
             print(f"[DEBUG] API key NOT saved (empty or masked)")
 
+    # Update Twilio settings
+    if 'twilio_account_sid' in data:
+        if data['twilio_account_sid'] and data['twilio_account_sid'] != '********':
+            settings.twilio_account_sid = data['twilio_account_sid']
+    if 'twilio_auth_token' in data:
+        if data['twilio_auth_token'] and data['twilio_auth_token'] != '********':
+            settings.twilio_auth_token = data['twilio_auth_token']
+    if 'twilio_phone_number' in data:
+        settings.twilio_phone_number = data['twilio_phone_number']
+
     db.session.commit()
 
     return jsonify({

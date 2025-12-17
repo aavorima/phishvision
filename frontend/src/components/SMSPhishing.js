@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '../ThemeContext';
+import { useAuth } from '../AuthContext';
 import { getSMSCampaigns, createSMSCampaign, deleteSMSCampaign, addSMSTargets, sendSMSCampaign, getSMSTemplates, getSMSStats } from '../api/api';
 
 function SMSPhishing() {
+  const { user } = useAuth();
   const [campaigns, setCampaigns] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [stats, setStats] = useState(null);
@@ -51,14 +53,16 @@ function SMSPhishing() {
   };
 
   const handleSend = async (id) => {
-    if (window.confirm('Send this SMS campaign? (Mock mode - no real SMS will be sent)')) {
+    if (window.confirm('Send this SMS campaign to all targets?')) {
       try {
-        const result = await sendSMSCampaign(id);
-        alert(`Campaign sent! ${result.data.results.sent} messages delivered (Mock mode: ${result.data.mock_mode})`);
+        const result = await sendSMSCampaign(id, user?.id);
+        const mockMode = result.data.mock_mode;
+        const sent = result.data.results.sent;
+        alert(`Campaign sent! ${sent} messages delivered${mockMode ? ' (Mock mode - no real SMS sent)' : ''}`);
         loadData();
       } catch (error) {
         console.error('Error sending:', error);
-        alert('Failed to send campaign');
+        alert('Failed to send campaign: ' + (error.response?.data?.error || error.message));
       }
     }
   };

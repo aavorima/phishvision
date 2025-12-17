@@ -154,6 +154,179 @@ class AITemplateGenerator:
 
         return " | ".join(context)
 
+    def _sanitize_template_output(self, template_data, description, brand, category):
+        """
+        Post-process and sanitize AI output to enforce strict rules.
+        This catches cases where AI doesn't follow instructions perfectly.
+        """
+        # SANITIZE TEMPLATE NAME
+        name = template_data.get('name', '')
+
+        # Remove common AI mistakes from name
+        name = re.sub(r'^(Template|Email|Phishing|Simulation):\s*', '', name, flags=re.IGNORECASE)
+        name = re.sub(r'\[EASY\]|\[MEDIUM\]|\[HARD\]|\[EXPERT\]', '', name, flags=re.IGNORECASE)
+        name = name.strip()
+
+        # If name is too long or just repeats the description, generate a clean one
+        if len(name) > 60 or len(name.split()) > 8 or description.lower() in name.lower():
+            # Generate a clean name based on category and brand
+            scenario_keywords = {
+                'password': 'Password Expiration Notice',
+                'account': 'Account Verification Required',
+                'security': 'Security Alert',
+                'update': 'Important Update',
+                'document': 'Document Shared',
+                'payment': 'Payment Action Required',
+                'benefits': 'Benefits Enrollment',
+                'policy': 'Policy Update',
+                'vpn': 'VPN Access Renewal',
+                'license': 'Software License Renewal',
+                'verification': 'Identity Verification',
+                'alert': 'Security Alert',
+                'notice': 'Important Notice',
+                'invoice': 'Invoice Payment Due',
+                'urgent': 'Urgent Action Required'
+            }
+
+            # Try to find a matching keyword
+            desc_lower = description.lower()
+            clean_name = f"{brand.title() if brand != 'internal' else category} Alert"
+
+            for keyword, scenario_name in scenario_keywords.items():
+                if keyword in desc_lower:
+                    clean_name = f"{brand.title() if brand != 'internal' else category} {scenario_name}"
+                    break
+
+            template_data['name'] = clean_name[:60]
+        else:
+            template_data['name'] = name[:60]
+
+        # SANITIZE SUBJECT LINE
+        subject = template_data.get('subject', '')
+
+        # Remove instructional language from subject
+        instructional_patterns = [
+            r'^(Create|Generate|Make|Write)\s+(an?\s+)?',
+            r'(email|template|subject)\s+(that|about|for)',
+            r'^(This is|Here is|Subject:)\s*',
+        ]
+        for pattern in instructional_patterns:
+            subject = re.sub(pattern, '', subject, flags=re.IGNORECASE)
+
+        subject = subject.strip()
+
+        # If subject is too long or looks like instructions, create a clean one
+        if len(subject) > 60 or any(word in subject.lower() for word in ['create', 'generate', 'template', 'write email']):
+            # Generate clean subject based on scenario
+            subject_templates = [
+                "Action Required: {{{{first_name}}}}, Review Your Account",
+                "Security Alert: Verify Your Identity",
+                "{{{{first_name}}}}, Your Password Expires Today",
+                "Important: Account Security Update",
+                "Urgent: Action Required by {{{{current_date}}}}",
+                f"{brand.title()}: Verify Your Account",
+                "Unusual Activity Detected",
+                "Your Account Requires Attention"
+            ]
+
+            # Pick based on description content
+            if 'password' in description.lower():
+                subject = "Action Required: Password Expiring Today"
+            elif 'security' in description.lower() or 'alert' in description.lower():
+                subject = "Security Alert: Verify Your Account"
+            elif 'document' in description.lower() or 'file' in description.lower():
+                subject = "{{{{first_name}}}}, Document Shared With You"
+            elif 'payment' in description.lower() or 'invoice' in description.lower():
+                subject = "Action Required: Payment Verification"
+            else:
+                subject = subject_templates[0]  # Default
+
+        # Ensure subject is not too long
+        template_data['subject'] = subject[:60]
+
+        # SANITIZE HTML CONTENT
+        html = template_data.get('html_content', '')
+
+        # Remove any AI disclaimers or explanatory text that might have leaked
+        disclaimer_patterns = [
+            r'<!--.*?AI generated.*?-->',
+            r'<!--.*?This is a simulation.*?-->',
+            r'<!--.*?For training.*?-->',
+            r'<p[^>]*>\s*\[?Note:.*?</p>',
+            r'<p[^>]*>\s*\[?Disclaimer:.*?</p>',
+        ]
+        for pattern in disclaimer_patterns:
+            html = re.sub(pattern, '', html, flags=re.IGNORECASE | re.DOTALL)
+
+        # CRITICAL FIX: Remove verbatim user description if it leaked into the content
+        # This prevents text like "create a password reset email from IT department" from appearing in the email
+        if description and len(description) > 20:  # Only check meaningful descriptions
+            # Escape special regex characters in the description
+            escaped_desc = re.escape(description)
+            # Try to find and remove the description (case-insensitive)
+            html = re.sub(escaped_desc, '', html, flags=re.IGNORECASE)
+
+            # Also remove common instruction patterns that might have slipped through
+            instruction_phrases = [
+                r'create\s+a\s+password\s+reset\s+email\s+from\s+it\s+department\s+saying[^<]*',
+                r'our\s+automated\s+systems\s+have\s+detected\s+an\s+issue:\s*<strong>[^<]*create[^<]*</strong>',
+                r'detected\s+an\s+issue:\s*<strong>[^<]*saying[^<]*</strong>',
+            ]
+            for pattern in instruction_phrases:
+                html = re.sub(pattern, '', html, flags=re.IGNORECASE)
+
+        # FIX: Replace broken logo image tags with proper logo placeholders
+        html = re.sub(
+            r'<img[^>]+alt=["\']Internal Logo["\'][^>]*>',
+            f'<div style="background:{self.BRAND_COLORS.get(brand, self.BRAND_COLORS["default"])["primary"]};color:#fff;padding:12px 20px;border-radius:4px;display:inline-block;font-weight:bold;font-size:18px;">{brand.title()}</div>',
+            html,
+            flags=re.IGNORECASE
+        )
+
+        # FIX: Ensure brand colors are actually used (replace common generic blue with brand colors)
+        brand_color_obj = self.BRAND_COLORS.get(brand, self.BRAND_COLORS["default"])
+
+        # Replace generic blues with brand primary color
+        html = re.sub(r'#1e3a8a\b', brand_color_obj['primary'], html, flags=re.IGNORECASE)
+        html = re.sub(r'#3b82f6\b', brand_color_obj['primary'], html, flags=re.IGNORECASE)
+        html = re.sub(r'#2563eb\b', brand_color_obj['primary'], html, flags=re.IGNORECASE)
+
+        # Add secondary color to gradients if they're using generic colors
+        html = re.sub(
+            r'linear-gradient\(135deg,\s*#1e3a8a\s+0%,\s*#3b82f6\s+100%\)',
+            f'linear-gradient(135deg, {brand_color_obj["primary"]} 0%, {brand_color_obj["secondary"]} 100%)',
+            html,
+            flags=re.IGNORECASE
+        )
+
+        template_data['html_content'] = html
+
+        # ENSURE METADATA EXISTS
+        if 'metadata' not in template_data:
+            template_data['metadata'] = {}
+
+        # Fill in missing metadata fields with defaults
+        metadata = template_data['metadata']
+        metadata.setdefault('impersonated_brand', brand)
+        metadata.setdefault('scenario_type', 'security_alert')
+        metadata.setdefault('primary_trigger', 'urgency')
+
+        if 'red_flags' not in metadata or not metadata['red_flags']:
+            metadata['red_flags'] = [
+                "Generic greeting or urgent language",
+                "Requests clicking on a link to resolve an issue",
+                "Creates artificial urgency with time pressure",
+                "Lacks specific details or context"
+            ]
+
+        if 'detection_tips' not in metadata or not metadata['detection_tips']:
+            metadata['detection_tips'] = [
+                "Verify by contacting the organization directly through official channels",
+                "Hover over links to check the actual URL before clicking"
+            ]
+
+        return template_data
+
     def generate_template(self, description, category='IT', difficulty='medium', company_name=''):
         """
         Generate realistic phishing simulation template for security awareness training.
@@ -194,73 +367,123 @@ class AITemplateGenerator:
                 """
             }
 
-            prompt = f"""You are a professional cybersecurity awareness specialist creating highly realistic phishing simulation email templates for AUTHORIZED employee training programs only.
+            prompt = f"""You are a professional cybersecurity awareness specialist creating realistic phishing simulation email templates for AUTHORIZED employee security training ONLY.
 
-**USER REQUEST**: {description}
+**SCENARIO TO SIMULATE**: {description}
+
+⚠️ CRITICAL: The scenario above is ONLY for your understanding. DO NOT copy it word-for-word into the email content. Create a realistic email that IMPLEMENTS this scenario naturally, as a real attacker would write it.
 
 **DETECTED BRAND**: {detected_brand.upper()}
-**EXACT BRAND COLORS TO USE** (DO NOT CHANGE THESE):
+**EXACT BRAND COLORS** (DO NOT DEVIATE):
 - Primary: {brand_colors['primary']}
 - Secondary: {brand_colors['secondary']}
 - Background: {brand_colors['bg']}
 - Text: {brand_colors['text']}
 - Button Border Radius: {brand_colors['button_radius']}
 
-**TEMPLATE PARAMETERS**:
+**CONTEXT**:
 - Difficulty: {difficulty}
 - Category: {category}
-- Organization Context: {company_name or detected_brand.title()}
-- Current Context: {current_context}
+- Organization: {company_name or detected_brand.title()}
+- Current Date: {current_context}
 
-**DIFFICULTY LEVEL**:
+**DIFFICULTY GUIDELINES**:
 {difficulty_guidelines.get(difficulty, difficulty_guidelines['medium'])}
 
-**CRITICAL DESIGN RULES** (MUST FOLLOW):
-1. Use EXACTLY the brand colors specified above - no random colors
-2. Match the real {detected_brand.title()} email style as closely as possible
-3. Use table-based layout for Outlook compatibility
-4. Button must use primary color ({brand_colors['primary']}) with border-radius: {brand_colors['button_radius']}
-5. Header should be clean, matching real {detected_brand.title()} emails
-6. Footer should mimic real corporate footers (legal text, unsubscribe, address)
-7. Logo placeholder: https://via.placeholder.com/180x50/{brand_colors['primary'].replace('#', '')}/FFFFFF?text={detected_brand.title()}
+---
 
-**REQUIRED TEMPLATE VARIABLES** (use double braces):
-{{{{full_name}}}}, {{{{first_name}}}}, {{{{last_name}}}}, {{{{email}}}}, {{{{company}}}}, {{{{department}}}}, {{{{tracking_link}}}}, {{{{current_date}}}}, {{{{current_time}}}}
+**CRITICAL OUTPUT RULES - FOLLOW EXACTLY:**
 
-**HTML REQUIREMENTS**:
-- Complete HTML5 with <!DOCTYPE html>
-- ALL CSS inline (no <style> blocks)
-- Table-based layout for email client compatibility
-- Mobile responsive (max-width: 600px)
-- Web-safe fonts: Arial, Helvetica, sans-serif
-- Professional spacing and alignment
+1. **TEMPLATE NAME RULES** (STRICTLY ENFORCED):
+   - MAX 8 words, MAX 60 characters total
+   - Must be descriptive but concise
+   - NO repetition of the user request
+   - NO instructional language
+   - Format: "[Brand/Department] [Action Type] [Context]"
+   - Examples: "Microsoft Password Expiration Notice", "IT Security Alert", "HR Benefits Update"
 
-**OUTPUT FORMAT** (STRICT JSON ONLY - no markdown, no extra text):
+2. **SUBJECT LINE RULES** (STRICTLY ENFORCED):
+   - MAX 60 characters
+   - Must sound natural and realistic
+   - NO instructional text or AI-speak
+   - NO repetition of the user description
+   - Use {{{{first_name}}}} for personalization where appropriate
+   - Examples:
+     * "Action Required: Password Expiring Today"
+     * "{{{{first_name}}}}, Verify Your Account"
+     * "Security Alert: Unusual Sign-in Detected"
+
+3. **HTML EMAIL RULES** (STRICTLY ENFORCED):
+   - Complete HTML5 document with <!DOCTYPE html>
+   - ALL CSS must be inline - NO <style> blocks
+   - Table-based layout for email client compatibility
+   - Max width: 600px
+   - Vary the fonts based on brand:
+     * Microsoft/Office365: 'Segoe UI', Tahoma, sans-serif
+     * Google/Gmail: 'Roboto', Arial, sans-serif
+     * Apple: 'SF Pro Display', -apple-system, sans-serif
+     * Default: Arial, Helvetica, sans-serif
+   - Mobile-friendly spacing (padding 15-30px)
+   - Professional corporate appearance
+   - NO JavaScript, NO external CSS
+   - Logo: Use an SVG or colored div as logo placeholder (NO broken image tags)
+   - Example logo: <div style="background:{brand_colors['primary']};color:#fff;padding:12px 20px;border-radius:4px;display:inline-block;font-weight:bold;font-size:18px;">{detected_brand.title()}</div>
+
+4. **REALISM REQUIREMENTS**:
+   - Must look EXACTLY like real {detected_brand.title()} emails
+   - CRITICAL: Use the EXACT brand colors in the header:
+     * Header background: {brand_colors['primary']} or gradient using primary + secondary
+     * Button color: {brand_colors['primary']}
+     * Accent colors: {brand_colors['secondary']}
+     * Text color: {brand_colors['text']}
+     * Page background: {brand_colors['bg']}
+   - Include professional header with brand identity
+   - Include realistic footer (legal text, unsubscribe, address)
+   - Use subtle social engineering (urgency, authority, routine action)
+   - NO obvious spelling/grammar errors (unless difficulty is "easy")
+   - NO over-aggressive scam language
+   - VARY EMAIL LAYOUTS - Choose ONE style randomly:
+     * Style A: Centered card with shadow, gradient header, rounded corners
+     * Style B: Full-width header, left-aligned content, minimal design
+     * Style C: Two-column layout with sidebar, professional corporate
+     * Style D: Simple clean design, centered button, lots of whitespace
+     * Style E: Dense information table-based, traditional email client look
+
+5. **EMAIL CONTENT RULES** (CRITICAL):
+   - Write the email body as a REAL {detected_brand.title()} email would be written
+   - DO NOT copy the scenario description word-for-word
+   - DO NOT include phrases like "create a password reset email" in the actual email
+   - Write naturally as if YOU are the {detected_brand.title()} IT department
+   - Example: Instead of writing "Our systems detected: create a password reset email", write "Your password will expire in 24 hours"
+   - The email should read smoothly and professionally, NOT like instructions
+
+6. **REQUIRED TEMPLATE VARIABLES** (use exactly as shown):
+   {{{{full_name}}}}, {{{{first_name}}}}, {{{{last_name}}}}, {{{{email}}}}, {{{{company}}}}, {{{{department}}}}, {{{{tracking_link}}}}, {{{{current_date}}}}, {{{{current_time}}}}
+
+7. **OUTPUT FORMAT** (STRICT JSON - no markdown, no comments, no explanations):
 {{
-  "name": "Short descriptive name (max 60 chars)",
-  "subject": "Realistic subject line with {{{{first_name}}}} if appropriate",
-  "html_content": "Complete HTML email matching {detected_brand.title()} brand exactly",
+  "name": "Clean professional name (max 8 words, max 60 chars)",
+  "subject": "Realistic subject line (max 60 chars, with variables if needed)",
+  "html_content": "Complete production-ready HTML email",
   "metadata": {{
     "difficulty": "{difficulty}",
     "impersonated_brand": "{detected_brand}",
     "brand_colors": {{"primary": "{brand_colors['primary']}", "secondary": "{brand_colors['secondary']}", "bg": "{brand_colors['bg']}"}},
-    "scenario_type": "password_reset | document_share | policy_update | payment | account_verify | security_alert",
-    "primary_trigger": "urgency | authority | fear | curiosity | compliance",
-    "red_flags": [
-      "Specific indicator 1 employees should notice",
-      "Specific indicator 2",
-      "Specific indicator 3",
-      "Specific indicator 4"
-    ],
-    "training_notes": "Why this simulation is effective and what it teaches",
-    "detection_tips": [
-      "How to verify this is fake",
-      "What to check before clicking"
-    ]
+    "scenario_type": "password_reset|document_share|policy_update|payment|account_verify|security_alert",
+    "primary_trigger": "urgency|authority|fear|curiosity|compliance",
+    "red_flags": ["Flag 1", "Flag 2", "Flag 3", "Flag 4"],
+    "training_notes": "Brief explanation of why this is effective",
+    "detection_tips": ["Verification method 1", "Verification method 2"]
   }}
 }}
 
-CRITICAL: Create a template that looks EXACTLY like a real {detected_brand.title()} email. Use the EXACT colors provided. This is for authorized security training only."""
+**CRITICAL REMINDERS**:
+- Template name: SHORT & DESCRIPTIVE (NOT the full user request)
+- Subject line: NATURAL & CONCISE (NOT instructional)
+- HTML: PRODUCTION-READY (NO AI disclaimers, NO explanatory text)
+- This is for AUTHORIZED security training to teach employees phishing recognition
+
+Generate the template now. Output ONLY valid JSON, nothing else."""
 
             response = self.model.generate_content(prompt)
             text = response.text.strip()
@@ -278,6 +501,9 @@ CRITICAL: Create a template that looks EXACTLY like a real {detected_brand.title
             required = ['name', 'subject', 'html_content']
             if not all(k in template_data for k in required):
                 raise ValueError("Missing required fields")
+
+            # POST-PROCESSING: Sanitize and enforce output rules
+            template_data = self._sanitize_template_output(template_data, description, detected_brand, category)
 
             template_data.setdefault('metadata', {})
             template_data['generated_at'] = datetime.now().isoformat()
@@ -300,6 +526,9 @@ CRITICAL: Create a template that looks EXACTLY like a real {detected_brand.title
         company = company_name or "Your Organization"
         now = datetime.now()
 
+        # Detect brand from description
+        detected_brand, brand_colors = self._detect_brand(description)
+
         # Template library by difficulty
         templates = {
             'easy': self._get_easy_template(description, category, company, now),
@@ -308,11 +537,21 @@ CRITICAL: Create a template that looks EXACTLY like a real {detected_brand.title
             'expert': self._get_expert_template(description, category, company, now)
         }
 
-        return templates.get(difficulty, templates['medium'])
+        template_data = templates.get(difficulty, templates['medium'])
+
+        # Apply sanitization to fix logos and apply brand colors
+        template_data = self._sanitize_template_output(template_data, description, detected_brand, category)
+
+        return template_data
 
     def _get_easy_template(self, description, category, company, now):
+        # Clean template name (max 8 words, max 60 chars)
+        template_name = f"{category} Security Alert"
+        if len(template_name) > 60:
+            template_name = f"{category} Alert"
+
         return {
-            'name': f"{category} Alert - {description.title()} [EASY]",
+            'name': template_name,
             'subject': f"URGENT!!! {{{{first_name}}}} ACTION NEEDED!!!",
             'html_content': f"""<!DOCTYPE html>
 <html><body style="font-family:Arial;background:#fff;padding:20px;">
@@ -344,9 +583,21 @@ CRITICAL: Create a template that looks EXACTLY like a real {detected_brand.title
         }
 
     def _get_medium_template(self, description, category, company, now):
+        # Clean template name
+        template_name = f"{category} Account Security Notice"
+        if len(template_name) > 60:
+            template_name = f"{category} Security Notice"
+
+        # Clean subject (max 60 chars)
+        subject = "Action Required: Verify Your Account"
+        if 'password' in description.lower():
+            subject = "Password Verification Required"
+        elif 'update' in description.lower():
+            subject = "Important: Account Update Needed"
+
         return {
-            'name': f"{category} Security Notice - {description.title()} [MEDIUM]",
-            'subject': f"Action Required: {{{{first_name}}}}, {description}",
+            'name': template_name,
+            'subject': subject[:60],
             'html_content': f"""<!DOCTYPE html>
 <html><body style="font-family:Arial,sans-serif;background:#f4f4f4;margin:0;padding:20px;">
 <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
@@ -392,9 +643,15 @@ CRITICAL: Create a template that looks EXACTLY like a real {detected_brand.title
 
     def _get_hard_template(self, description, category, company, now):
         incident_id = f"SEC-{now.year}-{now.strftime('%m%d%H%M')}"
+
+        # Clean template name
+        template_name = f"{category} Security Operations Alert"
+        if len(template_name) > 60:
+            template_name = f"{category} Security Review"
+
         return {
-            'name': f"{category} Critical Alert - {description.title()} [HARD]",
-            'subject': f"[{incident_id}] Security Review Required - {{{{first_name}}}} {{{{last_name}}}}",
+            'name': template_name,
+            'subject': f"[{incident_id}] Security Review Required",
             'html_content': f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
 <body style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f3f4f6;margin:0;padding:0;">
@@ -466,9 +723,15 @@ CRITICAL: Create a template that looks EXACTLY like a real {detected_brand.title
 
     def _get_expert_template(self, description, category, company, now):
         ticket_id = f"INC{now.year}{now.strftime('%m%d')}{now.hour:02d}{now.minute:02d}"
+
+        # Clean template name
+        template_name = f"{category} Compliance Division Notice"
+        if len(template_name) > 60:
+            template_name = f"{category} Compliance Notice"
+
         return {
-            'name': f"{category} Executive Notice - {description.title()} [EXPERT]",
-            'subject': f"[TICKET:{ticket_id}] Mandatory Compliance Action - {{{{department}}}} Division",
+            'name': template_name,
+            'subject': f"[TICKET:{ticket_id}] Mandatory Compliance Action",
             'html_content': f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>Security Compliance Notice</title></head>
 <body style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:#f8fafc;margin:0;padding:0;-webkit-font-smoothing:antialiased;">

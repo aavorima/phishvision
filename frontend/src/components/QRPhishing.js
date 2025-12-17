@@ -210,7 +210,8 @@ function CreateQRModal({ onClose, onSuccess, isDark }) {
       onSuccess();
     } catch (error) {
       console.error('Error creating campaign:', error);
-      alert('Failed to create QR campaign');
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to create QR campaign';
+      alert(errorMessage);
     } finally {
       setLoading(false);
     }

@@ -54,7 +54,17 @@ function Login() {
       }
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.error || 'An error occurred');
+      console.error('Login error:', err);
+      // Show more detailed error messages
+      if (err.response?.data?.error) {
+        setError(err.response.data.error);
+      } else if (err.message) {
+        setError(err.message);
+      } else if (err.code === 'ERR_NETWORK' || err.message?.includes('Network Error')) {
+        setError('Cannot connect to server. Make sure the backend is running on http://localhost:5000');
+      } else {
+        setError('An error occurred. Please check your connection and try again.');
+      }
     } finally {
       setLoading(false);
     }

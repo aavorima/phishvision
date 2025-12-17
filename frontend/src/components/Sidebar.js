@@ -163,8 +163,8 @@ const navStructure = [
     label: 'Profiling',
     icon: 'Profiling',
     children: [
-      { path: '/profiling/dashboard', label: 'Vulnerability Dashboard', icon: 'VulnDashboard' },
       { path: '/profiling/programs', label: 'Profiling Programs', icon: 'Program' },
+      { path: '/profiling/dashboard', label: 'Vulnerability Dashboard', icon: 'VulnDashboard' },
     ]
   },
   {

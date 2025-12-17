@@ -2,6 +2,7 @@ import smtplib
 import ssl
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
 from email.utils import formataddr
 import os
 from dotenv import load_dotenv
@@ -140,6 +141,71 @@ class EmailService:
             msg.attach(html_part)
 
             # Use SSL (port 465) or STARTTLS (port 587)
+            if self.use_ssl:
+                context = ssl.create_default_context()
+                with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, context=context) as server:
+                    server.login(self.smtp_username, self.smtp_password)
+                    server.send_message(msg)
+            else:
+                with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
+                    server.starttls()
+                    server.login(self.smtp_username, self.smtp_password)
+                    server.send_message(msg)
+
+            print(f"[EMAIL SENT] To: {to_email}, Subject: {subject}")
+            return True
+        except Exception as e:
+            print(f"[EMAIL ERROR] To: {to_email}, Error: {e}")
+            return False
+
+    def send_email_with_inline_image(self, to_email, subject, html_content, image_path, image_cid, from_name_override=None):
+        """
+        Send email with an inline image attachment.
+
+        Args:
+            to_email: Recipient email address
+            subject: Email subject
+            html_content: HTML content (use cid:image_cid in img src)
+            image_path: Path to the image file
+            image_cid: Content-ID for the image (used in HTML as cid:image_cid)
+            from_name_override: Optional sender display name
+
+        Returns:
+            True if sent successfully, False otherwise
+        """
+        from_name = from_name_override if from_name_override else self.smtp_from_name
+
+        if self.mock_mode:
+            print(f"[MOCK EMAIL] To: {to_email}")
+            print(f"[MOCK EMAIL] Subject: {subject}")
+            print(f"[MOCK EMAIL] From: {from_name} <{self.smtp_from}>")
+            print(f"[MOCK EMAIL] Image: {image_path}")
+            return True
+
+        try:
+            msg = MIMEMultipart('related')
+            msg['Subject'] = subject
+
+            if from_name:
+                msg['From'] = formataddr((from_name, self.smtp_from))
+            else:
+                msg['From'] = self.smtp_from
+
+            msg['To'] = to_email
+
+            # Attach HTML content
+            html_part = MIMEText(html_content, 'html')
+            msg.attach(html_part)
+
+            # Attach image
+            with open(image_path, 'rb') as img_file:
+                img_data = img_file.read()
+                image = MIMEImage(img_data)
+                image.add_header('Content-ID', f'<{image_cid}>')
+                image.add_header('Content-Disposition', 'inline', filename=os.path.basename(image_path))
+                msg.attach(image)
+
+            # Send email
             if self.use_ssl:
                 context = ssl.create_default_context()
                 with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, context=context) as server:

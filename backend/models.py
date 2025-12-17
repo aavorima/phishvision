@@ -138,7 +138,9 @@ class CampaignTarget(db.Model):
 
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     campaign_id = db.Column(db.String(36), db.ForeignKey('campaigns.id'), nullable=False)
+    name = db.Column(db.String(200), nullable=True)  # Employee name
     email = db.Column(db.String(200), nullable=False)
+    department = db.Column(db.String(200), nullable=True)  # Employee department
     tracking_token = db.Column(db.String(100), unique=True, nullable=False)
 
     # Tracking data
@@ -151,7 +153,9 @@ class CampaignTarget(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
+            'name': self.name,
             'email': self.email,
+            'department': self.department,
             'sent_at': self.sent_at.isoformat(),
             'opened_at': self.opened_at.isoformat() if self.opened_at else None,
             'clicked_at': self.clicked_at.isoformat() if self.clicked_at else None,
@@ -604,6 +608,7 @@ class QRCodeCampaign(db.Model):
     # Relationships
     landing_page = db.relationship('LandingPage', backref='qr_campaigns', lazy=True)
     program = db.relationship('CampaignProgram', backref='qr_campaigns', lazy=True)
+    targets = db.relationship('QRCodeTarget', backref='campaign', lazy=True, cascade='all, delete-orphan')
     scans = db.relationship('QRCodeScan', backref='campaign', lazy=True, cascade='all, delete-orphan')
 
     def to_dict(self):
@@ -620,6 +625,38 @@ class QRCodeCampaign(db.Model):
             'unique_scans': self.unique_scans,
             'created_at': self.created_at.isoformat(),
             'expires_at': self.expires_at.isoformat() if self.expires_at else None
+        }
+
+
+class QRCodeTarget(db.Model):
+    """Track who was sent QR code posters (similar to Email/SMS targets)"""
+    __tablename__ = 'qr_targets'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    campaign_id = db.Column(db.String(36), db.ForeignKey('qrcode_campaigns.id'), nullable=False)
+
+    # Employee info (who was sent the poster)
+    name = db.Column(db.String(200), nullable=True)
+    email = db.Column(db.String(200), nullable=False)
+    department = db.Column(db.String(200), nullable=True)
+    tracking_token = db.Column(db.String(100), unique=True, nullable=False)
+
+    # Tracking data
+    sent_at = db.Column(db.DateTime, nullable=True)
+    scanned_at = db.Column(db.DateTime, nullable=True)
+    ip_address = db.Column(db.String(50), nullable=True)
+    user_agent = db.Column(db.String(500), nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'email': self.email,
+            'department': self.department,
+            'sent_at': self.sent_at.isoformat() if self.sent_at else None,
+            'scanned_at': self.scanned_at.isoformat() if self.scanned_at else None,
+            'ip_address': self.ip_address,
+            'user_agent': self.user_agent
         }
 
 
@@ -714,8 +751,10 @@ class SMSTarget(db.Model):
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     campaign_id = db.Column(db.String(36), db.ForeignKey('sms_campaigns.id'), nullable=False)
 
+    name = db.Column(db.String(200), nullable=True)  # Employee name
     phone_number = db.Column(db.String(20), nullable=False)
     email = db.Column(db.String(200), nullable=True)  # Optional, for linking to user
+    department = db.Column(db.String(200), nullable=True)  # Employee department
     tracking_token = db.Column(db.String(100), unique=True, nullable=False)
 
     # Status tracking
@@ -731,8 +770,10 @@ class SMSTarget(db.Model):
         return {
             'id': self.id,
             'campaign_id': self.campaign_id,
+            'name': self.name,
             'phone_number': self.phone_number,
             'email': self.email,
+            'department': self.department,
             'sent_at': self.sent_at.isoformat() if self.sent_at else None,
             'delivered_at': self.delivered_at.isoformat() if self.delivered_at else None,
             'clicked_at': self.clicked_at.isoformat() if self.clicked_at else None,
@@ -1959,4 +2000,40 @@ class AgeGroupVulnerability(db.Model):
             },
             'peak_vulnerability_times': json.loads(self.peak_vulnerability_times) if self.peak_vulnerability_times else {},
             'last_calculated': self.last_calculated.isoformat() if self.last_calculated else None
+        }
+
+
+class TrainingCompletion(db.Model):
+    """Track when employees complete phishing awareness training"""
+    __tablename__ = 'training_completions'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    employee_id = db.Column(db.String(200), nullable=False)  # Can be target ID or employee email
+    employee_email = db.Column(db.String(200), nullable=True)
+    employee_name = db.Column(db.String(200), nullable=True)
+
+    # Campaign/Program context
+    program_id = db.Column(db.String(36), db.ForeignKey('campaign_programs.id'), nullable=True)
+    campaign_id = db.Column(db.String(36), nullable=True)  # Email, SMS, or QR campaign ID
+    campaign_type = db.Column(db.String(20), nullable=True)  # 'email', 'sms', 'qr'
+
+    # Training details
+    module = db.Column(db.String(50), nullable=False)  # 'email_link_click', 'smishing', 'qr_scan'
+    completed_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Additional tracking
+    ip_address = db.Column(db.String(50), nullable=True)
+    user_agent = db.Column(db.String(500), nullable=True)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'employee_id': self.employee_id,
+            'employee_email': self.employee_email,
+            'employee_name': self.employee_name,
+            'program_id': self.program_id,
+            'campaign_id': self.campaign_id,
+            'campaign_type': self.campaign_type,
+            'module': self.module,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None
         }

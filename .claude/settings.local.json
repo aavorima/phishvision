@@ -25,7 +25,28 @@
       "Bash(\"c:\\Users\\asus\\Desktop\\pishvision\\phishvision-main\\phishvision-main\\backend\\venv\\Scripts\\python.exe\" migrations/add_program_id_to_campaigns.py)",
       "Bash(git init:*)",
       "Bash(git config:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nFix profiling program campaign results display\n\n- Add program_id foreign key to Campaign, SMSCampaign, and QRCodeCampaign models\n- Link campaigns to their originating profiling programs\n- Update campaign creation helper functions to set program_id\n- Rewrite /programs/<program_id>/campaigns endpoint to return actual campaigns\n- Add detailed statistics for email, SMS, and QR campaigns\n- Create database migration to add program_id columns\n- Update frontend to display campaign results with stats in detail modal\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(python -c:*)",
+      "Bash(curl:*)",
+      "Bash(python add_department_column.py:*)",
+      "Bash(npm start)",
+      "Bash(python app.py:*)",
+      "Bash(taskkill:*)",
+      "Bash(powershell -Command \"Stop-Process -Name python -Force\")",
+      "Bash(powershell -Command \"Get-Process python | Stop-Process -Force\")",
+      "Bash(powershell -Command \"Get-Process python* | ForEach-Object { Stop-Process -Id $_Id -Force }\")",
+      "Bash(powershell -Command \"(Get-Item program_routes.py).LastWriteTime\")",
+      "Bash(python start_with_ngrok.py:*)",
+      "Bash(python fix_qr_program_link.py:*)",
+      "Bash(timeout 5 python:*)",
+      "Bash(cat:*)",
+      "Bash(timeout 5 bash -c 'curl -s \"\"http://localhost:5000/api/qr/scan/k_E3iyAKeJs5UdPz9otuuofC3Ce22ZlEzv_QYMQiKMM\"\" > /dev/null')",
+      "Bash(git commit:*)",
+      "Bash(rm -f backend/nul nul cookies.txt)"
     ]
   }
 }

@@ -41,12 +41,16 @@ function Settings() {
 
   // AI Settings form
   const [aiForm, setAiForm] = useState({
-    gemini_api_key: '',
+    gemini_api_key: ''
+  });
+  const [aiStatus, setAiStatus] = useState(null);
+
+  // SMS Settings form (Twilio)
+  const [smsForm, setSmsForm] = useState({
     twilio_account_sid: '',
     twilio_auth_token: '',
     twilio_phone_number: ''
   });
-  const [aiStatus, setAiStatus] = useState(null);
   const [twilioStatus, setTwilioStatus] = useState(null);
 
   useEffect(() => {
@@ -76,7 +80,9 @@ function Settings() {
         smtp_from_name: settings.smtp_from_name || ''
       });
       setAiForm({
-        gemini_api_key: settings.gemini_api_key || '',
+        gemini_api_key: settings.gemini_api_key || ''
+      });
+      setSmsForm({
         twilio_account_sid: settings.twilio_account_sid || '',
         twilio_auth_token: settings.twilio_auth_token || '',
         twilio_phone_number: settings.twilio_phone_number || ''
@@ -208,6 +214,20 @@ function Settings() {
     }
   };
 
+  const handleSmsSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await updateSettings(smsForm);
+      showMessage('success', 'SMS settings saved successfully');
+      loadSettings(); // Reload to get updated status
+    } catch (error) {
+      showMessage('error', error.response?.data?.error || 'Failed to save SMS settings');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleTestGemini = async () => {
     const key = aiForm.gemini_api_key?.trim();
     if (!key) {
@@ -236,6 +256,7 @@ function Settings() {
   const tabs = [
     { id: 'smtp', label: 'SMTP Settings', icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' },
     { id: 'ai', label: 'AI Settings', icon: 'M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' },
+    { id: 'sms', label: 'SMS Settings', icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z' },
     { id: 'profile', label: 'Profile', icon: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' },
     { id: 'security', label: 'Security', icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z' }
   ];
@@ -593,112 +614,120 @@ function Settings() {
                       </button>
                     </div>
                   </form>
+                </div>
+              </div>
+            )}
 
-                  {/* Twilio SMS Configuration */}
-                  <div className={`mt-8 pt-8 border-t ${isDark ? 'border-white/5' : 'border-black/5'}`}>
-                    <div className="mb-6">
-                      <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-surface-1'}`}>
-                        Twilio SMS Configuration
-                      </h2>
-                      <p className={`text-sm mt-1 ${isDark ? 'text-white/50' : 'text-surface-1/50'}`}>
-                        Configure Twilio credentials to send SMS phishing simulations.
+            {/* SMS Settings Tab */}
+            {activeTab === 'sms' && (
+              <div>
+                {/* SMS Status Banner */}
+                <div className={`p-4 border-b ${isDark ? 'border-white/5' : 'border-black/5'} ${
+                  twilioStatus?.configured
+                    ? 'bg-success/10'
+                    : 'bg-warning/10'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center">
+                      <div className={`w-3 h-3 rounded-full mr-3 ${twilioStatus?.configured ? 'bg-success' : 'bg-warning'}`}>
+                        <div className={`w-3 h-3 rounded-full animate-ping ${twilioStatus?.configured ? 'bg-success' : 'bg-warning'}`} />
+                      </div>
+                      <span className={`font-medium ${twilioStatus?.configured ? 'text-success' : 'text-warning'}`}>
+                        {twilioStatus?.configured ? 'Twilio SMS Configured' : 'Twilio SMS Not Configured'}
+                      </span>
+                    </div>
+                  </div>
+                  {!twilioStatus?.configured && (
+                    <p className={`text-sm mt-2 ${isDark ? 'text-white/50' : 'text-surface-1/50'}`}>
+                      Configure your Twilio credentials to enable SMS phishing simulations.
+                    </p>
+                  )}
+                </div>
+
+                <div className="p-6 space-y-6">
+                  <div>
+                    <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-surface-1'}`}>
+                      Twilio SMS Configuration
+                    </h2>
+                    <p className={`text-sm mt-1 ${isDark ? 'text-white/50' : 'text-surface-1/50'}`}>
+                      Configure Twilio credentials to send SMS phishing simulations (smishing campaigns).
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleSmsSubmit} className="space-y-5">
+                    <div>
+                      <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-white' : 'text-surface-1'}`}>
+                        Account SID
+                      </label>
+                      <input
+                        type="text"
+                        value={smsForm.twilio_account_sid}
+                        onChange={(e) => setSmsForm({ ...smsForm, twilio_account_sid: e.target.value })}
+                        placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                        className={`${inputClass} font-mono text-sm`}
+                      />
+                    </div>
+
+                    <div>
+                      <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-white' : 'text-surface-1'}`}>
+                        Auth Token
+                      </label>
+                      <input
+                        type="password"
+                        value={smsForm.twilio_auth_token}
+                        onChange={(e) => setSmsForm({ ...smsForm, twilio_auth_token: e.target.value })}
+                        placeholder="your_auth_token_here"
+                        className={`${inputClass} font-mono text-sm`}
+                      />
+                    </div>
+
+                    <div>
+                      <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-white' : 'text-surface-1'}`}>
+                        Phone Number
+                      </label>
+                      <input
+                        type="text"
+                        value={smsForm.twilio_phone_number}
+                        onChange={(e) => setSmsForm({ ...smsForm, twilio_phone_number: e.target.value })}
+                        placeholder="+1234567890"
+                        className={`${inputClass} font-mono text-sm`}
+                      />
+                      <p className={`text-xs mt-2 ${isDark ? 'text-white/40' : 'text-surface-1/40'}`}>
+                        Get your Twilio credentials from <a href="https://console.twilio.com/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Twilio Console</a>
                       </p>
                     </div>
 
-                    {twilioStatus && (
-                      <div className={`mb-4 p-3 rounded-lg flex items-center ${
-                        twilioStatus.configured
-                          ? (isDark ? 'bg-green-900/30 text-green-400' : 'bg-green-100 text-green-700')
-                          : (isDark ? 'bg-yellow-900/30 text-yellow-400' : 'bg-yellow-100 text-yellow-700')
-                      }`}>
-                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          {twilioStatus.configured ? (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          ) : (
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          )}
+                    <div className={`p-4 rounded-xl ${isDark ? 'bg-surface-3/50' : 'bg-surface-light-3'}`}>
+                      <div className="flex items-start">
+                        <svg className={`w-5 h-5 mr-3 mt-0.5 ${isDark ? 'text-primary' : 'text-primary'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <span className="text-sm font-medium">
-                          {twilioStatus.configured ? 'Twilio SMS Configured' : 'Twilio SMS Not Configured'}
-                        </span>
-                      </div>
-                    )}
-
-                    <form onSubmit={handleAiSubmit} className="space-y-5">
-                      <div>
-                        <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-white' : 'text-surface-1'}`}>
-                          Account SID
-                        </label>
-                        <input
-                          type="text"
-                          value={aiForm.twilio_account_sid}
-                          onChange={(e) => setAiForm({ ...aiForm, twilio_account_sid: e.target.value })}
-                          placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                          className={`${inputClass} font-mono text-sm`}
-                        />
-                      </div>
-
-                      <div>
-                        <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-white' : 'text-surface-1'}`}>
-                          Auth Token
-                        </label>
-                        <input
-                          type="password"
-                          value={aiForm.twilio_auth_token}
-                          onChange={(e) => setAiForm({ ...aiForm, twilio_auth_token: e.target.value })}
-                          placeholder="your_auth_token_here"
-                          className={`${inputClass} font-mono text-sm`}
-                        />
-                      </div>
-
-                      <div>
-                        <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-white' : 'text-surface-1'}`}>
-                          Phone Number
-                        </label>
-                        <input
-                          type="text"
-                          value={aiForm.twilio_phone_number}
-                          onChange={(e) => setAiForm({ ...aiForm, twilio_phone_number: e.target.value })}
-                          placeholder="+1234567890"
-                          className={`${inputClass} font-mono text-sm`}
-                        />
-                        <p className={`text-xs mt-2 ${isDark ? 'text-white/40' : 'text-surface-1/40'}`}>
-                          Get your Twilio credentials from <a href="https://console.twilio.com/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Twilio Console</a>
-                        </p>
-                      </div>
-
-                      <div className={`p-4 rounded-xl ${isDark ? 'bg-surface-3/50' : 'bg-surface-light-3'}`}>
-                        <div className="flex items-start">
-                          <svg className={`w-5 h-5 mr-3 mt-0.5 ${isDark ? 'text-primary' : 'text-primary'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                          <div>
-                            <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-surface-1'}`}>
-                              How to get Twilio credentials
-                            </p>
-                            <ol className={`text-sm mt-2 space-y-1 list-decimal list-inside ${isDark ? 'text-white/50' : 'text-surface-1/50'}`}>
-                              <li>Sign up for a Twilio account at twilio.com</li>
-                              <li>Go to Console Dashboard</li>
-                              <li>Copy Account SID and Auth Token</li>
-                              <li>Purchase a phone number or use trial number</li>
-                              <li>Enter credentials above and save</li>
-                            </ol>
-                          </div>
+                        <div>
+                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-surface-1'}`}>
+                            How to get Twilio credentials
+                          </p>
+                          <ol className={`text-sm mt-2 space-y-1 list-decimal list-inside ${isDark ? 'text-white/50' : 'text-surface-1/50'}`}>
+                            <li>Sign up for a Twilio account at <a href="https://www.twilio.com/try-twilio" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">twilio.com</a></li>
+                            <li>Go to Console Dashboard</li>
+                            <li>Copy your Account SID and Auth Token</li>
+                            <li>Purchase a phone number or use trial number</li>
+                            <li>Enter credentials above and save</li>
+                          </ol>
                         </div>
                       </div>
+                    </div>
 
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="group relative px-6 py-3 rounded-xl font-semibold text-surface-1 overflow-hidden transition-all duration-300 disabled:opacity-50 hover:scale-[1.02]"
-                      >
-                        <div className="absolute inset-0 bg-gradient-to-r from-primary to-primary-dim" />
-                        <span className="relative">
-                          {loading ? 'Saving...' : 'Save Twilio Settings'}
-                        </span>
-                      </button>
-                    </form>
-                  </div>
+                    <button
+                      type="submit"
+                      disabled={loading}
+                      className="group relative px-6 py-3 rounded-xl font-semibold text-surface-1 overflow-hidden transition-all duration-300 disabled:opacity-50 hover:scale-[1.02]"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-primary to-primary-dim" />
+                      <span className="relative">
+                        {loading ? 'Saving...' : 'Save SMS Settings'}
+                      </span>
+                    </button>
+                  </form>
                 </div>
               </div>
             )}

@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, session
 from database import db
-from models import Campaign, CampaignTarget, CustomTemplate, LandingPage, Settings, User
+from models import Campaign, CampaignTarget, CustomTemplate, LandingPage, Settings, User, CredentialCapture, ScheduledCampaign
 from services.email_service import EmailService
 from services.email_parser import parse_email_to_name, substitute_template_variables
 import json
@@ -192,11 +192,60 @@ def update_campaign_status(campaign_id):
 
 @bp.route('/<campaign_id>', methods=['DELETE'])
 def delete_campaign(campaign_id):
-    """Delete campaign"""
-    campaign = Campaign.query.get_or_404(campaign_id)
-    db.session.delete(campaign)
-    db.session.commit()
-    return '', 204
+    """Delete campaign and all related records"""
+    try:
+        from sqlalchemy import text
+
+        campaign = Campaign.query.get_or_404(campaign_id)
+
+        # Delete all related records using raw SQL to avoid ORM schema issues
+
+        # 1. First, get all target IDs for this campaign
+        target_ids = [t.id for t in campaign.targets]
+
+        # 2. Delete scheduled campaigns that reference this campaign's targets (use raw SQL)
+        if target_ids:
+            # For SQLite, we need to build the query with proper parameter binding
+            placeholders = ','.join([f':tid{i}' for i in range(len(target_ids))])
+            params = {f'tid{i}': tid for i, tid in enumerate(target_ids)}
+            db.session.execute(
+                text(f"DELETE FROM scheduled_campaigns WHERE target_id IN ({placeholders})"),
+                params
+            )
+
+        # 3. Delete scheduled campaigns that reference this campaign directly (use raw SQL)
+        db.session.execute(
+            text("DELETE FROM scheduled_campaigns WHERE campaign_id = :campaign_id"),
+            {'campaign_id': campaign_id}
+        )
+
+        # 4. Delete credential captures related to this campaign
+        db.session.execute(
+            text("DELETE FROM credential_captures WHERE campaign_id = :campaign_id"),
+            {'campaign_id': campaign_id}
+        )
+
+        # 5. Delete campaign targets (in case cascade doesn't work)
+        db.session.execute(
+            text("DELETE FROM campaign_targets WHERE campaign_id = :campaign_id"),
+            {'campaign_id': campaign_id}
+        )
+
+        # 6. Delete the campaign itself
+        db.session.execute(
+            text("DELETE FROM campaigns WHERE id = :campaign_id"),
+            {'campaign_id': campaign_id}
+        )
+
+        db.session.commit()
+
+        return jsonify({'message': 'Campaign deleted successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error deleting campaign {campaign_id}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Failed to delete campaign: {str(e)}'}), 500
 
 
 @bp.route('/smtp-status', methods=['GET'])
