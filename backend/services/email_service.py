@@ -1,9 +1,10 @@
 import smtplib
 import ssl
+import uuid
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
-from email.utils import formataddr
+from email.utils import formataddr, formatdate
 import os
 from dotenv import load_dotenv
 
@@ -137,18 +138,25 @@ class EmailService:
 
             msg['To'] = to_email
 
+            # Add headers to improve deliverability and reduce spam filtering delays
+            msg['Message-ID'] = f"<{uuid.uuid4()}@{self.smtp_from.split('@')[1]}>"
+            msg['Date'] = formatdate(localtime=True)
+            msg['X-Mailer'] = 'PhishVision Security Platform'
+            msg['X-Priority'] = '3'  # Normal priority (not urgent spam-like)
+
             html_part = MIMEText(html_content, 'html')
             msg.attach(html_part)
 
             # Use SSL (port 465) or STARTTLS (port 587)
+            context = ssl.create_default_context()
+
             if self.use_ssl:
-                context = ssl.create_default_context()
-                with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, context=context) as server:
+                with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, context=context, timeout=30) as server:
                     server.login(self.smtp_username, self.smtp_password)
                     server.send_message(msg)
             else:
-                with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
-                    server.starttls()
+                with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=30) as server:
+                    server.starttls(context=context)
                     server.login(self.smtp_username, self.smtp_password)
                     server.send_message(msg)
 
@@ -193,6 +201,12 @@ class EmailService:
 
             msg['To'] = to_email
 
+            # Add headers to improve deliverability
+            msg['Message-ID'] = f"<{uuid.uuid4()}@{self.smtp_from.split('@')[1]}>"
+            msg['Date'] = formatdate(localtime=True)
+            msg['X-Mailer'] = 'PhishVision Security Platform'
+            msg['X-Priority'] = '3'
+
             # Attach HTML content
             html_part = MIMEText(html_content, 'html')
             msg.attach(html_part)
@@ -206,14 +220,15 @@ class EmailService:
                 msg.attach(image)
 
             # Send email
+            context = ssl.create_default_context()
+
             if self.use_ssl:
-                context = ssl.create_default_context()
-                with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, context=context) as server:
+                with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, context=context, timeout=30) as server:
                     server.login(self.smtp_username, self.smtp_password)
                     server.send_message(msg)
             else:
-                with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
-                    server.starttls()
+                with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=30) as server:
+                    server.starttls(context=context)
                     server.login(self.smtp_username, self.smtp_password)
                     server.send_message(msg)
 
