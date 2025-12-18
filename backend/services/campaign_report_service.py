@@ -310,12 +310,15 @@ class CampaignReportService:
                 'department': dept,
                 'total_employees': total,
                 'clicked_count': data['clicked_count'],
+                'failed_count': data['clicked_count'],  # Alias for frontend compatibility
                 'click_rate': round(click_rate, 2),
+                'failure_rate': round(click_rate, 2),  # Alias for frontend compatibility
                 'opened_count': data['opened_count'],
                 'open_rate': round((data['opened_count'] / total * 100), 2) if total > 0 else 0,
                 'no_interaction_rate': round((data['no_interaction_count'] / total * 100), 2) if total > 0 else 0,
                 'avg_hvs_score': round(avg_hvs, 1),
-                'risk_level': risk_level
+                'risk_level': risk_level,
+                'training_needed': data['clicked_count']  # Number who need training
             })
 
         # Sort by click rate (highest risk first)

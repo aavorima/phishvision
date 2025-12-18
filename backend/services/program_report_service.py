@@ -628,8 +628,11 @@ class ProgramReportService:
                 'total_employees': total_employees,
                 'total_tests': data['total_sent'],
                 'total_clicked': data['total_clicked'],
+                'failed_count': data['total_clicked'],  # Same as total_clicked
                 'click_rate': round(click_rate, 1),
-                'risk_level': risk_level
+                'failure_rate': round(click_rate, 1),  # Same as click_rate
+                'risk_level': risk_level,
+                'training_needed': data['total_clicked']  # Number who need training
             })
 
         # Sort by risk level
