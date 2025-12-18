@@ -1046,7 +1046,7 @@ const ProgramReportModal = ({ program, onClose, isDarkMode }) => {
                             {dept.risk_level.toUpperCase()} RISK
                           </span>
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                        <div className="grid grid-cols-3 gap-4 mb-3">
                           <div>
                             <p className={`text-xs ${textSecondary}`}>Employees</p>
                             <p className={`text-lg font-semibold ${textPrimary}`}>{dept.total_employees}</p>
@@ -1058,10 +1058,6 @@ const ProgramReportModal = ({ program, onClose, isDarkMode }) => {
                           <div>
                             <p className={`text-xs ${textSecondary}`}>Failure Rate</p>
                             <p className={`text-lg font-semibold ${textPrimary}`}>{dept.failure_rate}%</p>
-                          </div>
-                          <div>
-                            <p className={`text-xs ${textSecondary}`}>Need Training</p>
-                            <p className={`text-lg font-semibold ${textPrimary}`}>{dept.training_needed}</p>
                           </div>
                         </div>
                         <div className="w-full bg-slate-600/20 rounded-full h-2">
