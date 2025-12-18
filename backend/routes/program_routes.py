@@ -673,13 +673,18 @@ def _launch_qr_campaign_from_config(user, program, qr_config):
     from datetime import datetime
 
     try:
+        print(f"[QR CAMPAIGN] Starting QR campaign launch for program: {program.name} (ID: {program.id})")
+
         # Get the template QR poster that user selected
         template_qr_id = qr_config.get('qr_campaign_id')
         if not template_qr_id:
+            print("[QR CAMPAIGN ERROR] No QR poster ID in config")
             return {'error': 'No QR poster selected', 'vector': 'qr'}
 
+        print(f"[QR CAMPAIGN] Using template QR ID: {template_qr_id}")
         template_qr = QRCodeCampaign.query.get(template_qr_id)
         if not template_qr:
+            print(f"[QR CAMPAIGN ERROR] Template QR not found: {template_qr_id}")
             return {'error': 'QR poster not found', 'vector': 'qr'}
 
         # Collect target employees
@@ -780,6 +785,7 @@ def _launch_qr_campaign_from_config(user, program, qr_config):
 
         # Verify QR code image exists
         if not campaign.qr_image_path:
+            print(f"[QR CAMPAIGN ERROR] Template QR has no image path. Template ID: {template_qr.id}")
             return {'error': 'QR code image not found for this campaign', 'vector': 'qr'}
 
         # Get QR code image path
@@ -787,7 +793,11 @@ def _launch_qr_campaign_from_config(user, program, qr_config):
         QR_CODE_DIR = os_module.path.join(os_module.path.dirname(os_module.path.dirname(__file__)), 'static', 'qrcodes')
         qr_path = os_module.path.join(QR_CODE_DIR, campaign.qr_image_path)
 
+        print(f"[QR CAMPAIGN DEBUG] Looking for QR image at: {qr_path}")
+        print(f"[QR CAMPAIGN DEBUG] QR image exists: {os_module.path.exists(qr_path)}")
+
         if not os_module.path.exists(qr_path):
+            print(f"[QR CAMPAIGN ERROR] QR image file not found: {qr_path}")
             return {'error': f'QR code image file not found: {qr_path}', 'vector': 'qr'}
 
         # Create QR targets (just like Email/SMS campaigns)
@@ -916,10 +926,12 @@ def _launch_qr_campaign_from_config(user, program, qr_config):
             'total': len(target_employees)
         }
 
+        print(f"[QR CAMPAIGN] Successfully launched! Campaign ID: {campaign.id}, Sent: {emails_sent}, Failed: {emails_failed}")
         return result
 
     except Exception as e:
         import traceback
+        print(f"[QR CAMPAIGN ERROR] Exception occurred:")
         traceback.print_exc()
         return {'error': f'Failed to launch QR campaign: {str(e)}', 'vector': 'qr'}
 
