@@ -334,6 +334,16 @@ def _launch_email_campaign_from_config(user, program, email_config):
         if not target_recipients:
             return {'error': 'No email recipients found', 'vector': 'email'}
 
+        # Deduplicate recipients by email to prevent duplicate sends
+        seen_emails = set()
+        deduplicated_recipients = []
+        for recipient in target_recipients:
+            if recipient['email'] not in seen_emails:
+                seen_emails.add(recipient['email'])
+                deduplicated_recipients.append(recipient)
+
+        target_recipients = deduplicated_recipients
+
         # Get email service configured for user
         settings = Settings.query.filter_by(user_id=user.id).first()
         email_service = EmailService.from_user_settings(settings, allow_env_fallback=False)
@@ -539,6 +549,17 @@ def _launch_sms_campaign_from_config(user, program, sms_config):
         if not target_phones:
             return {'error': 'No phone numbers found for SMS campaign', 'vector': 'sms'}
 
+        # Deduplicate phone numbers to prevent duplicate sends
+        seen_phones = set()
+        deduplicated_phones = []
+        for phone_data in target_phones:
+            phone_number = phone_data['phone'] if isinstance(phone_data, dict) else phone_data
+            if phone_number not in seen_phones:
+                seen_phones.add(phone_number)
+                deduplicated_phones.append(phone_data)
+
+        target_phones = deduplicated_phones
+
         # Create SMS Campaign
         base_url = os.environ.get('BASE_URL', 'http://localhost:5000')
         campaign = SMSCampaign(
@@ -725,6 +746,16 @@ def _launch_qr_campaign_from_config(user, program, qr_config):
 
         if not target_employees:
             return {'error': 'No target employees found', 'vector': 'qr'}
+
+        # Deduplicate target employees by email to prevent duplicate sends
+        seen_emails = set()
+        deduplicated_employees = []
+        for emp in target_employees:
+            if emp['email'] not in seen_emails:
+                seen_emails.add(emp['email'])
+                deduplicated_employees.append(emp)
+
+        target_employees = deduplicated_employees
 
         # CREATE NEW QR CAMPAIGN for this program (copy from template)
         campaign = QRCodeCampaign(

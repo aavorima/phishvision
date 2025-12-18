@@ -179,10 +179,9 @@ def get_qr_image(campaign_id):
     """Get the QR code image for a campaign"""
     campaign = QRCodeCampaign.query.get_or_404(campaign_id)
 
-    if not campaign.qr_image_path:
-        return jsonify({'error': 'QR image not generated'}), 404
-
-    qr_path = os.path.join(QR_CODE_DIR, campaign.qr_image_path)
+    # Construct the expected filename from campaign ID (more reliable than stored path)
+    qr_filename = f"qr_{campaign.id}.png"
+    qr_path = os.path.join(QR_CODE_DIR, qr_filename)
 
     if not os.path.exists(qr_path):
         return jsonify({'error': 'QR image file not found'}), 404
@@ -195,10 +194,12 @@ def download_qr_image(campaign_id):
     """Download QR code as image file"""
     campaign = QRCodeCampaign.query.get_or_404(campaign_id)
 
-    if not campaign.qr_image_path:
-        return jsonify({'error': 'QR image not generated'}), 404
+    # Construct the expected filename from campaign ID (more reliable than stored path)
+    qr_filename = f"qr_{campaign.id}.png"
+    qr_path = os.path.join(QR_CODE_DIR, qr_filename)
 
-    qr_path = os.path.join(QR_CODE_DIR, campaign.qr_image_path)
+    if not os.path.exists(qr_path):
+        return jsonify({'error': 'QR image file not found'}), 404
 
     return send_file(
         qr_path,

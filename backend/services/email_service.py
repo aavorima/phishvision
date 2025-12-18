@@ -127,38 +127,32 @@ class EmailService:
             return True
 
         try:
-            msg = MIMEMultipart('alternative')
+            # Use simple MIMEText for HTML (not MIMEMultipart) - faster delivery
+            msg = MIMEText(html_content, 'html', 'utf-8')
             msg['Subject'] = subject
 
-            # Set From with display name if configured
+            # Set From with simple format (like test email)
             if from_name:
-                msg['From'] = formataddr((from_name, self.smtp_from))
+                msg['From'] = f"{from_name} <{self.smtp_from}>"
             else:
                 msg['From'] = self.smtp_from
 
             msg['To'] = to_email
 
-            # Add headers to improve deliverability and reduce spam filtering delays
-            msg['Message-ID'] = f"<{uuid.uuid4()}@{self.smtp_from.split('@')[1]}>"
+            # Minimal headers - less suspicious to spam filters
             msg['Date'] = formatdate(localtime=True)
-            msg['X-Mailer'] = 'PhishVision Security Platform'
-            msg['X-Priority'] = '3'  # Normal priority (not urgent spam-like)
+            msg['Message-ID'] = f"<{uuid.uuid4()}@{self.smtp_from.split('@')[1]}>"
 
-            html_part = MIMEText(html_content, 'html')
-            msg.attach(html_part)
-
-            # Use SSL (port 465) or STARTTLS (port 587)
-            context = ssl.create_default_context()
-
+            # Simple SMTP connection (like test email) - faster, less complex
             if self.use_ssl:
-                with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, context=context, timeout=30) as server:
-                    server.login(self.smtp_username, self.smtp_password)
-                    server.send_message(msg)
+                server = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port)
             else:
-                with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=30) as server:
-                    server.starttls(context=context)
-                    server.login(self.smtp_username, self.smtp_password)
-                    server.send_message(msg)
+                server = smtplib.SMTP(self.smtp_host, self.smtp_port)
+                server.starttls()
+
+            server.login(self.smtp_username, self.smtp_password)
+            server.send_message(msg)
+            server.quit()
 
             print(f"[EMAIL SENT] To: {to_email}, Subject: {subject}")
             return True
@@ -191,21 +185,21 @@ class EmailService:
             return True
 
         try:
+            # Use MIMEMultipart('related') for inline images (required for CID)
             msg = MIMEMultipart('related')
             msg['Subject'] = subject
 
+            # Simple From format (like test email) - faster delivery
             if from_name:
-                msg['From'] = formataddr((from_name, self.smtp_from))
+                msg['From'] = f"{from_name} <{self.smtp_from}>"
             else:
                 msg['From'] = self.smtp_from
 
             msg['To'] = to_email
 
-            # Add headers to improve deliverability
+            # Minimal headers only
             msg['Message-ID'] = f"<{uuid.uuid4()}@{self.smtp_from.split('@')[1]}>"
             msg['Date'] = formatdate(localtime=True)
-            msg['X-Mailer'] = 'PhishVision Security Platform'
-            msg['X-Priority'] = '3'
 
             # Attach HTML content
             html_part = MIMEText(html_content, 'html')
@@ -219,18 +213,16 @@ class EmailService:
                 image.add_header('Content-Disposition', 'inline', filename=os.path.basename(image_path))
                 msg.attach(image)
 
-            # Send email
-            context = ssl.create_default_context()
-
+            # Simple SMTP connection (like test email) - faster
             if self.use_ssl:
-                with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, context=context, timeout=30) as server:
-                    server.login(self.smtp_username, self.smtp_password)
-                    server.send_message(msg)
+                server = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port)
             else:
-                with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=30) as server:
-                    server.starttls(context=context)
-                    server.login(self.smtp_username, self.smtp_password)
-                    server.send_message(msg)
+                server = smtplib.SMTP(self.smtp_host, self.smtp_port)
+                server.starttls()
+
+            server.login(self.smtp_username, self.smtp_password)
+            server.send_message(msg)
+            server.quit()
 
             print(f"[EMAIL SENT] To: {to_email}, Subject: {subject}")
             return True
