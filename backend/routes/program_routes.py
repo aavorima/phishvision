@@ -750,7 +750,10 @@ def _launch_qr_campaign_from_config(user, program, qr_config):
             ]
 
         if not target_employees:
+            print("[QR CAMPAIGN ERROR] No target employees found")
             return {'error': 'No target employees found', 'vector': 'qr'}
+
+        print(f"[QR CAMPAIGN] Found {len(target_employees)} target employees")
 
         # Deduplicate target employees by email to prevent duplicate sends
         seen_emails = set()
@@ -761,44 +764,64 @@ def _launch_qr_campaign_from_config(user, program, qr_config):
                 deduplicated_employees.append(emp)
 
         target_employees = deduplicated_employees
+        print(f"[QR CAMPAIGN] After deduplication: {len(target_employees)} unique employees")
 
-        # CREATE NEW QR CAMPAIGN for this program (copy from template)
+        # Generate tracking ID for the campaign
+        tracking_id = str(uuid.uuid4())[:8]
+        base_url = os.environ.get('BASE_URL', 'http://localhost:5000')
+        target_url = f"{base_url}/api/qr/scan/{tracking_id}"
+
+        # CREATE NEW QR CAMPAIGN for this program
+        print(f"[QR CAMPAIGN] Creating new campaign for program")
         campaign = QRCodeCampaign(
             name=f"{program.name} - QR Campaign",
-            description=template_qr.description,
-            target_url=template_qr.target_url,
+            description=template_qr.description if template_qr.description else f"QR campaign for {program.name}",
+            target_url=target_url,  # Generate new tracking URL
             landing_page_id=template_qr.landing_page_id,
-            qr_image_path=template_qr.qr_image_path,  # Use same QR image
             status='active',
             placement_location='Email Poster',
             program_id=program.id  # LINK TO PROGRAM!
         )
         db.session.add(campaign)
-        db.session.flush()
+        db.session.flush()  # Get the campaign ID
+        print(f"[QR CAMPAIGN] Campaign created with ID: {campaign.id}, Program ID: {campaign.program_id}")
+
+        # Generate NEW QR code for this campaign
+        import qrcode
+        import os as os_module
+
+        QR_CODE_DIR = os_module.path.join(os_module.path.dirname(os_module.path.dirname(__file__)), 'static', 'qrcodes')
+        qr_filename = f"qr_{campaign.id}.png"
+        qr_path = os_module.path.join(QR_CODE_DIR, qr_filename)
+
+        print(f"[QR CAMPAIGN] Generating QR code for campaign")
+        try:
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_H,
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(target_url)
+            qr.make(fit=True)
+
+            # Create QR code image
+            img = qr.make_image(fill_color='#000000', back_color='white')
+            img.save(qr_path)
+
+            campaign.qr_image_path = qr_filename
+            print(f"[QR CAMPAIGN] QR code generated and saved to: {qr_path}")
+        except Exception as e:
+            print(f"[QR CAMPAIGN ERROR] Failed to generate QR code: {e}")
+            return {'error': f'Failed to generate QR code: {str(e)}', 'vector': 'qr'}
 
         # Get email service
         settings = Settings.query.filter_by(user_id=user.id).first()
         email_service = EmailService.from_user_settings(settings, allow_env_fallback=True)
 
         if not email_service.is_configured():
+            print("[QR CAMPAIGN ERROR] Email service not configured")
             return {'error': 'Email service is not configured. Please configure SMTP settings.', 'vector': 'qr'}
-
-        # Verify QR code image exists
-        if not campaign.qr_image_path:
-            print(f"[QR CAMPAIGN ERROR] Template QR has no image path. Template ID: {template_qr.id}")
-            return {'error': 'QR code image not found for this campaign', 'vector': 'qr'}
-
-        # Get QR code image path
-        import os as os_module
-        QR_CODE_DIR = os_module.path.join(os_module.path.dirname(os_module.path.dirname(__file__)), 'static', 'qrcodes')
-        qr_path = os_module.path.join(QR_CODE_DIR, campaign.qr_image_path)
-
-        print(f"[QR CAMPAIGN DEBUG] Looking for QR image at: {qr_path}")
-        print(f"[QR CAMPAIGN DEBUG] QR image exists: {os_module.path.exists(qr_path)}")
-
-        if not os_module.path.exists(qr_path):
-            print(f"[QR CAMPAIGN ERROR] QR image file not found: {qr_path}")
-            return {'error': f'QR code image file not found: {qr_path}', 'vector': 'qr'}
 
         # Create QR targets (just like Email/SMS campaigns)
         emails_sent = 0
@@ -824,12 +847,7 @@ def _launch_qr_campaign_from_config(user, program, qr_config):
         # Commit targets before sending emails
         db.session.commit()
 
-        # Generate base tracking URL
-        import os as os_module
-        base_url = os_module.environ.get('BASE_URL', 'http://localhost:5000')
-
         # Send poster to each recipient with personalized QR code
-        import qrcode
         import io
 
         for recipient in target_employees:
