@@ -113,36 +113,6 @@ function TemplateEditor({ template, onClose, onSave, isDark }) {
                 />
               </div>
 
-              {/* Subject Line */}
-              <div>
-                <label className={'block text-sm font-medium mb-2 ' + textPrimary}>Email Subject *</label>
-                <input
-                  type="text"
-                  value={formData.subject}
-                  onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                  className={'w-full px-3 py-2 border rounded-lg focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm ' + inputBg}
-                  placeholder="e.g., Urgent: Your Password Expires in 24 Hours"
-                />
-              </div>
-
-              {/* From Name (Sender Display Name) */}
-              <div>
-                <label className={'block text-sm font-medium mb-2 ' + textPrimary}>
-                  Sender Name
-                  <span className={textSecondary + ' font-normal ml-2'}>(optional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.from_name}
-                  onChange={(e) => setFormData({ ...formData, from_name: e.target.value })}
-                  className={'w-full px-3 py-2 border rounded-lg focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm ' + inputBg}
-                  placeholder="e.g., Zoom Support Team, Amazon Delivery, IT Security"
-                />
-                <p className={'text-xs mt-1 ' + textSecondary}>
-                  Display name shown in the "From" field. Leave empty to use default SMTP settings.
-                </p>
-              </div>
-
               {/* Category, Difficulty, Language Row */}
               <div className="grid grid-cols-3 gap-4">
                 <div>
@@ -185,6 +155,36 @@ function TemplateEditor({ template, onClose, onSave, isDark }) {
                 </div>
               </div>
 
+              {/* Subject Line */}
+              <div>
+                <label className={'block text-sm font-medium mb-2 ' + textPrimary}>Email Subject *</label>
+                <input
+                  type="text"
+                  value={formData.subject}
+                  onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                  className={'w-full px-3 py-2 border rounded-lg focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm ' + inputBg}
+                  placeholder="e.g., Urgent: Your Password Expires in 24 Hours"
+                />
+              </div>
+
+              {/* From Name (Sender Display Name) */}
+              <div>
+                <label className={'block text-sm font-medium mb-2 ' + textPrimary}>
+                  Sender Name
+                  <span className={textSecondary + ' font-normal ml-2'}>(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.from_name}
+                  onChange={(e) => setFormData({ ...formData, from_name: e.target.value })}
+                  className={'w-full px-3 py-2 border rounded-lg focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm ' + inputBg}
+                  placeholder="e.g., Zoom Support Team, Amazon Delivery, IT Security"
+                />
+                <p className={'text-xs mt-1 ' + textSecondary}>
+                  Display name shown in the "From" field. Leave empty to use default SMTP settings.
+                </p>
+              </div>
+
               {/* Description */}
               <div>
                 <label className={'block text-sm font-medium mb-2 ' + textPrimary}>Description</label>
@@ -195,21 +195,6 @@ function TemplateEditor({ template, onClose, onSave, isDark }) {
                   rows="2"
                   placeholder="Brief description of this phishing template..."
                 />
-              </div>
-
-              {/* Variables Help */}
-              <div className={(isDark ? 'bg-indigo-500/20 border-indigo-500/30' : 'bg-indigo-50 border-indigo-200') + ' border rounded-lg p-4'}>
-                <p className={'text-sm font-medium mb-2 ' + (isDark ? 'text-indigo-400' : 'text-indigo-900')}>Available Variables:</p>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <code className={(isDark ? 'bg-gray-700 text-indigo-300' : 'bg-white text-indigo-700') + ' px-2 py-1 rounded'}>{'{{recipient_name}}'}</code>
-                  <span className={textSecondary}>Parsed from email</span>
-                  <code className={(isDark ? 'bg-gray-700 text-indigo-300' : 'bg-white text-indigo-700') + ' px-2 py-1 rounded'}>{'{{recipient_email}}'}</code>
-                  <span className={textSecondary}>Full email address</span>
-                  <code className={(isDark ? 'bg-gray-700 text-indigo-300' : 'bg-white text-indigo-700') + ' px-2 py-1 rounded'}>{'{{tracking_link}}'}</code>
-                  <span className={textSecondary}>Click tracking URL</span>
-                  <code className={(isDark ? 'bg-gray-700 text-indigo-300' : 'bg-white text-indigo-700') + ' px-2 py-1 rounded'}>{'{{base_url}}'}</code>
-                  <span className={textSecondary}>Server base URL</span>
-                </div>
               </div>
             </div>
 

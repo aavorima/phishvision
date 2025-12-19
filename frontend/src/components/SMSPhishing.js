@@ -12,6 +12,7 @@ function SMSPhishing() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showTargetsModal, setShowTargetsModal] = useState(null);
   const [activeTab, setActiveTab] = useState('campaigns');
+  const [selectedCampaigns, setSelectedCampaigns] = useState([]);
   const { isDark } = useTheme();
 
   // Theme classes
@@ -67,6 +68,41 @@ function SMSPhishing() {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedCampaigns.length === 0) {
+      alert('Please select at least one campaign to delete.');
+      return;
+    }
+    if (window.confirm(`Delete ${selectedCampaigns.length} SMS campaign(s)?`)) {
+      try {
+        await Promise.all(selectedCampaigns.map(id => deleteSMSCampaign(id)));
+        setSelectedCampaigns([]);
+        loadData();
+      } catch (error) {
+        console.error('Error deleting campaigns:', error);
+        alert('Failed to delete some campaigns.');
+      }
+    }
+  };
+
+  const toggleCampaignSelection = (campaignId) => {
+    setSelectedCampaigns(prev => {
+      if (prev.includes(campaignId)) {
+        return prev.filter(id => id !== campaignId);
+      } else {
+        return [...prev, campaignId];
+      }
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedCampaigns.length === campaigns.length) {
+      setSelectedCampaigns([]);
+    } else {
+      setSelectedCampaigns(campaigns.map(c => c.id));
+    }
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'sent': return 'bg-green-100 text-green-800';
@@ -104,12 +140,38 @@ function SMSPhishing() {
           <h1 className={`text-2xl font-bold ${textPrimary}`}>SMS Phishing (Smishing)</h1>
           <p className={textSecondary}>Create and manage SMS phishing campaigns</p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          + Create SMS Campaign
-        </button>
+        <div className="flex gap-3">
+          {campaigns.length > 0 && activeTab === 'campaigns' && (
+            <>
+              <button
+                onClick={toggleSelectAll}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  selectedCampaigns.length === campaigns.length
+                    ? 'bg-blue-600 text-white'
+                    : isDark
+                      ? 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                      : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                }`}
+              >
+                {selectedCampaigns.length === campaigns.length ? 'Deselect All' : 'Select All'}
+              </button>
+              {selectedCampaigns.length > 0 && (
+                <button
+                  onClick={handleBulkDelete}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Delete Selected ({selectedCampaigns.length})
+                </button>
+              )}
+            </>
+          )}
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            + Create SMS Campaign
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -158,10 +220,42 @@ function SMSPhishing() {
       {/* Campaigns Tab */}
       {activeTab === 'campaigns' && (
         <div className="space-y-4">
-          {campaigns.map((campaign) => (
-            <div key={campaign.id} className={`${cardBg} rounded-xl p-4 border ${cardBorder}`}>
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
+          {campaigns.map((campaign) => {
+            const isSelected = selectedCampaigns.includes(campaign.id);
+            return (
+              <div
+                key={campaign.id}
+                className={`${cardBg} rounded-xl p-4 border ${
+                  isSelected
+                    ? 'border-blue-500 shadow-lg shadow-blue-500/20'
+                    : cardBorder
+                } relative transition-all`}
+              >
+                {/* Selection Checkbox */}
+                <div className="absolute top-4 left-4">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleCampaignSelection(campaign.id);
+                    }}
+                    className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-all ${
+                      isSelected
+                        ? 'bg-blue-600 border-blue-600'
+                        : isDark
+                          ? 'bg-slate-700 border-slate-500 hover:border-blue-500'
+                          : 'bg-white border-slate-400 hover:border-blue-500'
+                    }`}
+                  >
+                    {isSelected && (
+                      <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+
+                <div className="flex justify-between items-start">
+                  <div className="flex-1 pl-10">
                   <div className="flex items-center gap-2 mb-2">
                     <h3 className={`font-semibold ${textPrimary}`}>{campaign.name}</h3>
                     <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(campaign.status)}`}>
@@ -199,11 +293,12 @@ function SMSPhishing() {
                     className="px-3 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700"
                   >
                     Delete
-                  </button>
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {campaigns.length === 0 && (
             <div className={`text-center py-12 ${textSecondary}`}>

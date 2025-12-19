@@ -50,11 +50,12 @@ def get_qr_campaigns():
 
 @bp.route('/campaigns/<campaign_id>', methods=['GET'])
 def get_qr_campaign(campaign_id):
-    """Get a specific QR campaign with scans"""
+    """Get a specific QR campaign with scans and targets"""
     campaign = QRCodeCampaign.query.get_or_404(campaign_id)
 
     result = campaign.to_dict()
     result['scans'] = [s.to_dict() for s in campaign.scans]
+    result['targets'] = [t.to_dict() for t in campaign.targets]
 
     return jsonify(result)
 
@@ -515,26 +516,21 @@ def track_qr_scan(tracking_id):
 
     db.session.commit()
 
-    # Redirect to landing page (like SMS links do)
-    landing_page = None
+    # Always show the QR training page instead of landing page
+    import os as os_module
+    base_url = os_module.environ.get('BASE_URL', 'http://localhost:5000')
+    scanned_url = f"{base_url}/api/qr/scan/{tracking_id}"
 
-    # First, try to use the campaign's specified landing page
-    if campaign.landing_page_id:
-        landing_page = LandingPage.query.get(campaign.landing_page_id)
-
-    # If no landing page specified, use the first active landing page
-    if not landing_page:
-        landing_page = LandingPage.query.filter_by(is_active=True).first()
-
-    # If we have a landing page, show it
-    if landing_page:
-        # Generate a tracking token for this scan
-        tracking_token = str(uuid.uuid4())
-        html = landing_page.html_content.replace('{{tracking_token}}', tracking_token)
-        return render_template_string(html, tracking_token=tracking_token)
-
-    # Fallback: show training page if no landing pages exist
-    return redirect('/api/qr/training')
+    return render_template_string(
+        QR_TRAINING_PAGE,
+        employee_name='Unknown',
+        employee_id='',
+        employee_email='',
+        placement_location=campaign.placement_location or 'Unknown',
+        program_id='',
+        campaign_id=campaign.id,
+        scanned_url=scanned_url
+    )
 
 
 @bp.route('/training')

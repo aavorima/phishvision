@@ -15,6 +15,8 @@ function CampaignManager() {
   const [errorMessage, setErrorMessage] = useState('');
   const [smtpConfigured, setSmtpConfigured] = useState(null);
   const [showSmtpWarning, setShowSmtpWarning] = useState(false);
+  const [selectedCampaigns, setSelectedCampaigns] = useState([]);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const navigate = useNavigate();
   const { isDark } = useTheme();
 
@@ -73,6 +75,48 @@ function CampaignManager() {
     }
   };
 
+  const handleBulkDeleteClick = () => {
+    if (selectedCampaigns.length === 0) {
+      setErrorMessage('Please select at least one campaign to delete.');
+      setShowErrorDialog(true);
+      return;
+    }
+    setShowBulkDeleteDialog(true);
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    try {
+      await Promise.all(selectedCampaigns.map(id => deleteCampaign(id)));
+      setShowBulkDeleteDialog(false);
+      setSelectedCampaigns([]);
+      loadCampaigns();
+      setShowSuccessDialog(true);
+    } catch (error) {
+      console.error('Error deleting campaigns:', error);
+      setShowBulkDeleteDialog(false);
+      setErrorMessage('Failed to delete some campaigns. Please try again.');
+      setShowErrorDialog(true);
+    }
+  };
+
+  const toggleCampaignSelection = (campaignId) => {
+    setSelectedCampaigns(prev => {
+      if (prev.includes(campaignId)) {
+        return prev.filter(id => id !== campaignId);
+      } else {
+        return [...prev, campaignId];
+      }
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedCampaigns.length === campaigns.length) {
+      setSelectedCampaigns([]);
+    } else {
+      setSelectedCampaigns(campaigns.map(c => c.id));
+    }
+  };
+
   if (showCreate) {
     return (
       <div className={`min-h-screen p-6 ${isDark ? 'bg-surface-1' : 'bg-surface-light-1'}`}>
@@ -108,19 +152,45 @@ function CampaignManager() {
                 Manage phishing simulation campaigns
               </p>
             </div>
-            <button
-              onClick={handleNewCampaignClick}
-              className="group relative px-6 py-3 rounded-xl font-semibold text-surface-1 overflow-hidden transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-            >
-              <div className="absolute inset-0 bg-gradient-to-r from-primary to-primary-dim" />
-              <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/25 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
-              <span className="relative flex items-center">
-                <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                New Campaign
-              </span>
-            </button>
+            <div className="flex gap-3">
+              {campaigns.length > 0 && (
+                <>
+                  <button
+                    onClick={toggleSelectAll}
+                    className={`px-4 py-3 rounded-xl font-semibold transition-all duration-300 hover:scale-[1.02] ${
+                      selectedCampaigns.length === campaigns.length
+                        ? 'bg-primary text-surface-1'
+                        : isDark
+                          ? 'bg-surface-2 text-white border border-white/10'
+                          : 'bg-white text-surface-1 border border-black/10'
+                    }`}
+                  >
+                    {selectedCampaigns.length === campaigns.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                  {selectedCampaigns.length > 0 && (
+                    <button
+                      onClick={handleBulkDeleteClick}
+                      className="px-4 py-3 rounded-xl font-semibold bg-danger text-white transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+                    >
+                      Delete Selected ({selectedCampaigns.length})
+                    </button>
+                  )}
+                </>
+              )}
+              <button
+                onClick={handleNewCampaignClick}
+                className="group relative px-6 py-3 rounded-xl font-semibold text-surface-1 overflow-hidden transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-primary to-primary-dim" />
+                <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/25 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
+                <span className="relative flex items-center">
+                  <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  New Campaign
+                </span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -157,6 +227,8 @@ function CampaignManager() {
                 onView={() => navigate(`/campaigns/${campaign.id}`)}
                 onViewReport={() => navigate(`/campaigns/${campaign.id}/report`)}
                 onDelete={() => handleDeleteClick(campaign.id)}
+                isSelected={selectedCampaigns.includes(campaign.id)}
+                onToggleSelect={() => toggleCampaignSelection(campaign.id)}
                 isDark={isDark}
                 index={index}
               />
@@ -215,11 +287,22 @@ function CampaignManager() {
         cancelText="Cancel"
         type="warning"
       />
+
+      <ConfirmDialog
+        isOpen={showBulkDeleteDialog}
+        title="Delete Multiple Campaigns"
+        message={`Are you sure you want to delete ${selectedCampaigns.length} campaign(s)? This action cannot be undone and all campaign data will be permanently removed.`}
+        onConfirm={handleBulkDeleteConfirm}
+        onCancel={() => setShowBulkDeleteDialog(false)}
+        confirmText={`Delete ${selectedCampaigns.length} Campaign(s)`}
+        cancelText="Cancel"
+        type="danger"
+      />
     </div>
   );
 }
 
-function CampaignCard({ campaign, onView, onViewReport, onDelete, isDark, index }) {
+function CampaignCard({ campaign, onView, onViewReport, onDelete, isSelected, onToggleSelect, isDark, index }) {
   const getStatusConfig = (status) => {
     const configs = {
       active: { bg: 'bg-success/10', text: 'text-success', border: 'border-success/20', label: 'ACTIVE' },
@@ -241,32 +324,60 @@ function CampaignCard({ campaign, onView, onViewReport, onDelete, isDark, index 
   return (
     <div
       className={`group relative rounded-2xl border overflow-hidden transition-all duration-500 hover:scale-[1.02] ${
-        isDark ? 'bg-surface-2 border-white/5 hover:border-white/10' : 'bg-white border-black/5 hover:border-black/10 shadow-lg hover:shadow-xl'
+        isSelected
+          ? isDark ? 'bg-primary/10 border-primary' : 'bg-primary/10 border-primary shadow-lg shadow-primary/20'
+          : isDark ? 'bg-surface-2 border-white/5 hover:border-white/10' : 'bg-white border-black/5 hover:border-black/10 shadow-lg hover:shadow-xl'
       }`}
       style={{ animationDelay: `${index * 100}ms` }}
     >
+      {/* Selection Checkbox */}
+      <div className="absolute top-4 left-4 z-10">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSelect();
+          }}
+          className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
+            isSelected
+              ? 'bg-primary border-primary'
+              : isDark
+                ? 'bg-surface-3 border-white/30 hover:border-primary'
+                : 'bg-white border-black/30 hover:border-primary'
+          }`}
+        >
+          {isSelected && (
+            <svg className="w-4 h-4 text-surface-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+        </button>
+      </div>
+
       {/* Header */}
       <div className={`p-5 border-b ${isDark ? 'border-white/5 bg-surface-3/50' : 'border-black/5 bg-surface-light-2'}`}>
-        <div className="flex justify-between items-start mb-3">
-          <h3 className={`text-base font-semibold truncate pr-4 ${isDark ? 'text-white' : 'text-surface-1'}`}>
+        <div className="flex justify-between items-start">
+          <h3 className={`text-base font-semibold truncate pr-4 pl-8 ${isDark ? 'text-white' : 'text-surface-1'}`}>
             {campaign.name}
           </h3>
           <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold border flex-shrink-0 ${statusConfig.bg} ${statusConfig.text} ${statusConfig.border}`}>
             {statusConfig.label}
           </span>
         </div>
-        <p className={`text-xs capitalize ${isDark ? 'text-white/40' : 'text-surface-1/40'}`}>
-          {campaign.template_type.replace('_', ' ')}
-        </p>
       </div>
 
       {/* Stats */}
       <div className="p-5">
         <div className="grid grid-cols-2 gap-3 mb-5">
-          <div className={`rounded-xl p-3 ${isDark ? 'bg-surface-3/50' : 'bg-surface-light-3'}`}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onView();
+            }}
+            className={`rounded-xl p-3 text-left transition-all hover:scale-[1.02] cursor-pointer ${isDark ? 'bg-surface-3/50 hover:bg-surface-3' : 'bg-surface-light-3 hover:bg-surface-light-4'}`}
+          >
             <div className={`text-xs font-medium mb-1 ${isDark ? 'text-white/40' : 'text-surface-1/40'}`}>TARGETS</div>
             <div className={`text-2xl font-bold font-mono ${isDark ? 'text-white' : 'text-surface-1'}`}>{campaign.total_targets}</div>
-          </div>
+          </button>
           <div className={`rounded-xl p-3 ${isDark ? 'bg-surface-3/50' : 'bg-surface-light-3'}`}>
             <div className={`text-xs font-medium mb-1 ${isDark ? 'text-white/40' : 'text-surface-1/40'}`}>OPENED</div>
             <div className="text-primary text-2xl font-bold font-mono">{campaign.opened_count}</div>

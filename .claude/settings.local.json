@@ -46,7 +46,15 @@
       "Bash(cat:*)",
       "Bash(timeout 5 bash -c 'curl -s \"\"http://localhost:5000/api/qr/scan/k_E3iyAKeJs5UdPz9otuuofC3Ce22ZlEzv_QYMQiKMM\"\" > /dev/null')",
       "Bash(git commit:*)",
-      "Bash(rm -f backend/nul nul cookies.txt)"
+      "Bash(rm -f backend/nul nul cookies.txt)",
+      "Bash(python delete_sms_target.py:*)",
+      "Bash(del delete_sms_target.py)",
+      "Bash(python check_sms_targets.py:*)",
+      "Bash(python check_all_sms_campaigns.py:*)",
+      "Bash(python delete_specific_target.py:*)",
+      "Bash(python check_january_program.py:*)",
+      "Bash(python find_orphaned_qr.py:*)",
+      "Bash(python -c \"\nimport sys\nsys.path.insert\\(0, ''.''\\)\nfrom database import db\nfrom models import SMSCampaign, SMSTarget\nfrom sqlalchemy import create_engine\nfrom sqlalchemy.orm import sessionmaker\n\nengine = create_engine\\(''sqlite:///phishvision.db''\\)\nSession = sessionmaker\\(bind=engine\\)\nsession = Session\\(\\)\n\ncampaigns = session.query\\(SMSCampaign\\).order_by\\(SMSCampaign.created_at.desc\\(\\)\\).limit\\(5\\).all\\(\\)\n\nprint\\(''Recent SMS Campaigns:''\\)\nfor c in campaigns:\n    target_count = session.query\\(SMSTarget\\).filter_by\\(campaign_id=c.id\\).count\\(\\)\n    print\\(f''  {c.name} - Status: {c.status}, Targets: {target_count}, Created: {c.created_at}''\\)\n\nprint\\(''\\\\nAll SMS Targets:''\\)\ntargets = session.query\\(SMSTarget\\).all\\(\\)\nfor t in targets:\n    print\\(f''  Campaign: {t.campaign_id}, Phone: {t.phone_number}, Email: {t.email}, Sent: {t.sent_at}''\\)\n\")"
     ]
   }
 }

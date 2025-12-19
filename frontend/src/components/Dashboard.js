@@ -293,43 +293,6 @@ function Dashboard() {
               )}
             </div>
 
-            {/* SOC Incidents */}
-            {socMetrics && (
-              <div className={`rounded-xl p-6 ${isDark ? 'bg-[#12141a] border border-white/5' : 'bg-white border border-black/5 shadow-sm'}`}>
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Incident Response</h3>
-                  <Link to="/soc" className={`text-xs font-medium ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'}`}>
-                    View All →
-                  </Link>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className={`p-4 rounded-lg ${isDark ? 'bg-white/5' : 'bg-gray-50'}`}>
-                    <div className={`text-2xl font-bold tabular-nums ${socMetrics.active_incidents > 0 ? 'text-red-500' : isDark ? 'text-white' : 'text-gray-900'}`}>
-                      {socMetrics.active_incidents}
-                    </div>
-                    <div className={`text-xs mt-1 ${isDark ? 'text-white/40' : 'text-gray-500'}`}>Active Incidents</div>
-                  </div>
-                  <div className={`p-4 rounded-lg ${isDark ? 'bg-white/5' : 'bg-gray-50'}`}>
-                    <div className={`text-2xl font-bold tabular-nums ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      {socMetrics.mttr_minutes || 0}<span className={`text-sm ${isDark ? 'text-white/40' : 'text-gray-400'}`}>m</span>
-                    </div>
-                    <div className={`text-xs mt-1 ${isDark ? 'text-white/40' : 'text-gray-500'}`}>Avg Response Time</div>
-                  </div>
-                </div>
-
-                {/* Severity Breakdown */}
-                <div className="mt-4 pt-4 border-t border-dashed" style={{ borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }}>
-                  <div className={`text-xs uppercase tracking-wider mb-3 ${isDark ? 'text-white/30' : 'text-gray-400'}`}>By Severity</div>
-                  <div className="flex gap-2">
-                    <SeverityBadge label="Critical" count={socMetrics.severity_counts?.critical || 0} color="red" isDark={isDark} />
-                    <SeverityBadge label="High" count={socMetrics.severity_counts?.high || 0} color="orange" isDark={isDark} />
-                    <SeverityBadge label="Medium" count={socMetrics.severity_counts?.medium || 0} color="yellow" isDark={isDark} />
-                    <SeverityBadge label="Low" count={socMetrics.severity_counts?.low || 0} color="green" isDark={isDark} />
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Campaign Performance - Center Column */}

@@ -24,7 +24,11 @@ function TemplateManager() {
     try {
       setLoading(true);
       const response = await api.getTemplates();
-      setTemplates(response.data);
+      // Sort templates: newest first (by created_at descending)
+      const sortedTemplates = response.data.sort((a, b) => {
+        return new Date(b.created_at) - new Date(a.created_at);
+      });
+      setTemplates(sortedTemplates);
     } catch (error) {
       console.error('Error loading templates:', error);
     } finally {
@@ -400,15 +404,6 @@ function TemplatePreviewModal({ template, onClose, onReload, isDark }) {
                     title="Email Preview"
                     sandbox="allow-same-origin"
                   />
-                </div>
-              )}
-
-              {previewData?.parsed_data && (
-                <div className={(isDark ? 'bg-green-500/20 border-green-500/30' : 'bg-green-50 border-green-200') + ' border p-4 rounded-lg'}>
-                  <p className={'text-xs font-medium mb-3 ' + (isDark ? 'text-green-400' : 'text-green-900')}>Sample Data Used:</p>
-                  <pre className={(isDark ? 'bg-gray-900 text-green-300' : 'bg-white text-green-800') + ' p-3 rounded-lg overflow-x-auto text-xs'}>
-                    {JSON.stringify(previewData.parsed_data, null, 2)}
-                  </pre>
                 </div>
               )}
             </div>

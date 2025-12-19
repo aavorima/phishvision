@@ -222,38 +222,6 @@ Users are flagged as repeat offenders if:
 - Progress tracking and reporting
     `
   },
-  {
-    id: 'soc-timeline',
-    title: 'SOC Timeline',
-    icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
-    content: `
-## SOC Timeline & Incidents
-
-Track security incidents and response times.
-
-### Incident Types
-
-- **Phishing Click**: User clicked a phishing link
-- **Credential Entered**: User submitted credentials
-- **Malware Download**: User downloaded malicious file
-- **Reported Email**: User reported suspicious email
-
-### Incident Workflow
-
-1. **Detected**: Incident automatically created
-2. **Investigating**: SOC analyst reviewing
-3. **Contained**: Threat contained/isolated
-4. **Resolved**: Incident closed
-
-### Metrics Tracked
-
-- Mean Time to Detect (MTTD)
-- Mean Time to Respond (MTTR)
-- Incident volume by type
-- Resolution rates
-- Response time trends
-    `
-  }
 ];
 
 function UserGuide() {

@@ -426,6 +426,7 @@ const QRVectorResults = ({ vectorName, vectorIcon, campaign, isDarkMode }) => {
           <table className="w-full">
             <thead className={isDarkMode ? 'bg-gray-800' : 'bg-gray-100'}>
               <tr>
+                <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Name</th>
                 <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Email</th>
                 <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Department</th>
                 <th className={`px-4 py-3 text-left text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>Scanned At</th>
@@ -436,6 +437,9 @@ const QRVectorResults = ({ vectorName, vectorIcon, campaign, isDarkMode }) => {
             <tbody className={isDarkMode ? 'bg-gray-900' : 'bg-white'}>
               {scans.filter(scan => scan.scanned_at).map((scan, index) => (
                 <tr key={scan.id || index} className={`border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                  <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>
+                    {scan.name || '-'}
+                  </td>
                   <td className={`px-4 py-3 text-sm ${isDarkMode ? 'text-gray-300' : 'text-gray-900'}`}>
                     {scan.email || scan.user_email || '-'}
                   </td>
